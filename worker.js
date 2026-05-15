@@ -136,6 +136,13 @@ export default {
         headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
       });
 
+      // Strip PII from accounts before returning to client
+      if (pathname === '/accounts' && apiRes.ok) {
+        const accounts = await apiRes.json();
+        const safe = accounts.map(({ id, first_name, last_name }) => ({ id, first_name, last_name }));
+        return jsonResponse(safe);
+      }
+
       const body = await apiRes.arrayBuffer();
 
       return new Response(body, {

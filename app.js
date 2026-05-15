@@ -3,17 +3,19 @@ const state = {
   view: 'my-website-pages',
   report: 'stale',
   pages: [],          // processed PageRecord[]
-  names: [],          // sorted unique steward+deputy names
+  names: [],          // sorted staff names (from /accounts, or derived from guide data)
   guideOptions: [],   // sorted unique guide titles
   selectedName: '',   // shared across My Website Pages + My Research Guides
   stewardship: {},    // page_id → { steward, deputy } from stewardship.json
   stewardshipDirty: false,
   manageFilters: { guide: '', status: 'all' },
   reportFilters: {
-    stale:     { steward: '', olderThan: '' },
-    unassigned:{ guide: '', missing: 'either' },
-    missing:   { guide: '' },
-    hidden:    { guide: '' },
+    stale:      { steward: '', olderThan: '' },
+    unassigned: { guide: '', missing: 'either' },
+    missing:    { guide: '' },
+    hidden:     { guide: '' },
+    'rg-stale': { owner: '', olderThan: '' },
+    'rg-hidden':{ guide: '' },
   },
 };
 
@@ -192,7 +194,9 @@ function processGuides(guides) {
   }
 
   state.pages       = pages;
-  state.names       = Array.from(nameSet).sort((a,b) => a.localeCompare(b));
+  if (state.names.length === 0) {
+    state.names = Array.from(nameSet).sort((a,b) => a.localeCompare(b));
+  }
   state.guideOptions = Array.from(guideSet).sort((a,b) => a.localeCompare(b));
 }
 
@@ -204,6 +208,26 @@ async function loadData(force = false) {
     if (sr.ok) state.stewardship = await sr.json();
   } catch { /* file missing or invalid — start empty */ }
   state.stewardshipDirty = false;
+
+  // Fetch staff accounts for name lists (emails are stripped by the worker)
+  try {
+    const ar = await fetch(`${CONFIG.WORKER_URL}/accounts`);
+    if (ar.ok) {
+      const accounts = await ar.json();
+      state.names = accounts
+        .filter(a => {
+          if (!a.first_name && !a.last_name) return false;
+          const email = (a.email || '').toLowerCase();
+          if (email.endsWith('@springshare.com')) return false;
+          if ((a.last_name || '').includes('(test)')) return false;
+          if (email.includes('+')) return false; // service/alias accounts
+          return true;
+        })
+        .map(a => `${a.first_name} ${a.last_name}`.trim())
+        .filter(Boolean)
+        .sort((a,b) => a.localeCompare(b));
+    }
+  } catch { /* fall back to names derived from guide data */ }
 
   if (!force) {
     const cached = sessionStorage.getItem(CONFIG.SESSION_KEY);
@@ -258,6 +282,27 @@ function guideOpts(selected = '') {
   ).join('');
 }
 
+function websiteGuideOpts(selected = '') {
+  const titles = [...new Set(
+    state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId)).map(p => p.guideTitle)
+  )].sort((a,b) => a.localeCompare(b));
+  return titles.map(g => `<option value="${esc(g)}" ${g === selected ? 'selected':''}>${esc(g)}</option>`).join('');
+}
+
+function researchGuideOpts(selected = '') {
+  const titles = [...new Set(
+    state.pages.filter(p => CONFIG.RESEARCH_GUIDE_GROUPS.includes(p.groupId)).map(p => p.guideTitle)
+  )].sort((a,b) => a.localeCompare(b));
+  return titles.map(g => `<option value="${esc(g)}" ${g === selected ? 'selected':''}>${esc(g)}</option>`).join('');
+}
+
+function researchOwnerOpts(selected = '') {
+  const owners = [...new Set(
+    state.pages.filter(p => CONFIG.RESEARCH_GUIDE_GROUPS.includes(p.groupId) && p.guideOwner).map(p => p.guideOwner)
+  )].sort((a,b) => a.localeCompare(b));
+  return owners.map(n => `<option value="${esc(n)}" ${n === selected ? 'selected':''}>${esc(n)}</option>`).join('');
+}
+
 // ── View: My Website Pages / My Research Guides ────────────────────
 function renderMyWebsitePages() {
   renderPersonView(
@@ -283,7 +328,7 @@ function renderMyResearchGuides() {
 
   const topbar = `
     <div class="topbar">
-      <span class="topbar-title">My Research Guides</span>
+      <h1>My Research Guides</h1>
       <label class="filter-label" for="rg-name">Viewing as</label>
       <select id="rg-name">
         <option value="">— select name —</option>
@@ -376,7 +421,7 @@ function renderPersonView(viewId, title, groupIds) {
 
   const topbar = `
     <div class="topbar">
-      <span class="topbar-title">${esc(title)}</span>
+      <h1>${esc(title)}</h1>
       <label class="filter-label" for="mp-name-${viewId}">Viewing as</label>
       <select id="mp-name-${viewId}">
         <option value="">— select name —</option>
@@ -456,29 +501,37 @@ function renderPersonView(viewId, title, groupIds) {
 }
 
 // ── View: Reports ──────────────────────────────────────────────────
-const REPORTS = [
-  { id:'stale',      icon:'🕐', title:'Stale content',           desc:'Pages not updated since a specified date. Good for identifying maintenance priorities.' },
-  { id:'unassigned', icon:'👤', title:'Unassigned pages',         desc:'Pages missing a steward, deputy, or both. Run before committee check-ins.' },
-  { id:'missing',    icon:'⚠️', title:'Missing stewardship box',  desc:'Pages with no stewardship info box at all. Requires manual remediation.' },
-  { id:'hidden',     icon:'🙈', title:'Hidden pages',             desc:'Pages with display disabled. May be drafts or retired content worth reviewing.' },
+const WEBSITE_REPORTS = [
+  { id:'stale',      icon:'🕐', title:'Stale content',              desc:'Pages not updated since a specified date. Good for identifying maintenance priorities.' },
+  { id:'unassigned', icon:'👤', title:'Unassigned pages',            desc:'Pages missing a steward, deputy, or both. Run before committee check-ins.' },
+  { id:'missing',    icon:'⚠️', title:'Missing stewardship record',  desc:'Pages with no stewardship record at all. Requires manual remediation.' },
+  { id:'hidden',     icon:'🙈', title:'Hidden pages',                desc:'Pages with display disabled. May be drafts or retired content worth reviewing.' },
+];
+
+const RESEARCH_REPORTS = [
+  { id:'rg-stale',  icon:'🕐', title:'Stale guides',   desc:'Guides with pages not updated since a specified date.' },
+  { id:'rg-hidden', icon:'🙈', title:'Hidden pages',    desc:'Pages with display disabled within research guides.' },
 ];
 
 function renderReports() {
   const container = el('view-reports');
 
-  const cardsHtml = REPORTS.map(r => `
+  const cardHtml = r => `
     <div class="report-card ${r.id === state.report ? 'active' : ''}" data-report="${r.id}" role="button" tabindex="0">
       <span class="report-card-icon">${r.icon}</span>
       <h3>${r.title}</h3>
       <p>${r.desc}</p>
-    </div>`).join('');
+    </div>`;
 
   container.innerHTML = `
     <div class="topbar">
-      <span class="topbar-title">Reports</span>
+      <h1>Reports</h1>
     </div>
     <div class="content">
-      <div class="report-grid">${cardsHtml}</div>
+      <h2 class="report-section-label">Website Pages</h2>
+      <div class="report-grid">${WEBSITE_REPORTS.map(cardHtml).join('')}</div>
+      <h2 class="report-section-label" style="margin-top:1.25rem">Research Guides</h2>
+      <div class="report-grid">${RESEARCH_REPORTS.map(cardHtml).join('')}</div>
       <div id="report-panel"></div>
     </div>`;
 
@@ -499,6 +552,8 @@ function renderReportPanel() {
     case 'unassigned': renderUnassignedPanel(panel);  break;
     case 'missing':    renderMissingPanel(panel);     break;
     case 'hidden':     renderHiddenPanel(panel);      break;
+    case 'rg-stale':   renderRgStalePanel(panel);     break;
+    case 'rg-hidden':  renderRgHiddenPanel(panel);    break;
   }
 }
 
@@ -537,7 +592,7 @@ function runStaleReport() {
   state.reportFilters.stale.olderThan = before;
   state.reportFilters.stale.steward   = steward;
 
-  let data = state.pages.filter(p => p.freshness === 'stale' || p.freshness === 'very-stale');
+  let data = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId) && (p.freshness === 'stale' || p.freshness === 'very-stale'));
   if (steward) data = data.filter(p => p.steward === steward || p.deputy === steward);
   if (before) {
     const cutoff = new Date(before).getTime();
@@ -586,7 +641,7 @@ function renderUnassignedPanel(panel) {
         <label class="filter-label">Guide</label>
         <select id="r-un-guide">
           <option value="">All guides</option>
-          ${guideOpts(f.guide)}
+          ${websiteGuideOpts(f.guide)}
         </select>
         <label class="filter-label">Missing</label>
         <select id="r-un-missing">
@@ -611,7 +666,7 @@ function runUnassignedReport() {
   state.reportFilters.unassigned.guide   = guide;
   state.reportFilters.unassigned.missing = missing;
 
-  let data = state.pages.filter(p => p.hasStewardshipBox && (!p.steward || !p.deputy));
+  let data = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId) && p.hasStewardshipBox && (!p.steward || !p.deputy));
   if (guide)            data = data.filter(p => p.guideTitle === guide);
   if (missing==='steward') data = data.filter(p => !p.steward);
   if (missing==='deputy')  data = data.filter(p => !p.deputy);
@@ -653,12 +708,12 @@ function renderMissingPanel(panel) {
   const f = state.reportFilters.missing;
   panel.innerHTML = `
     <div class="report-panel">
-      <p class="report-panel-title">Missing stewardship box report</p>
+      <p class="report-panel-title">Missing stewardship record report</p>
       <div class="filter-row">
         <label class="filter-label">Guide</label>
         <select id="r-mb-guide">
           <option value="">All guides</option>
-          ${guideOpts(f.guide)}
+          ${websiteGuideOpts(f.guide)}
         </select>
         <button class="btn-run" id="r-mb-run">Run report</button>
       </div>
@@ -674,7 +729,7 @@ function runMissingReport() {
   const guide = el('r-mb-guide')?.value || '';
   state.reportFilters.missing.guide = guide;
 
-  let data = state.pages.filter(p => !p.hasStewardshipBox);
+  let data = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId) && !p.hasStewardshipBox);
   if (guide) data = data.filter(p => p.guideTitle === guide);
 
   const rowsHtml = data.length === 0
@@ -714,7 +769,7 @@ function renderHiddenPanel(panel) {
         <label class="filter-label">Guide</label>
         <select id="r-hp-guide">
           <option value="">All guides</option>
-          ${guideOpts(f.guide)}
+          ${websiteGuideOpts(f.guide)}
         </select>
         <button class="btn-run" id="r-hp-run">Run report</button>
       </div>
@@ -730,7 +785,7 @@ function runHiddenReport() {
   const guide = el('r-hp-guide')?.value || '';
   state.reportFilters.hidden.guide = guide;
 
-  let data = state.pages.filter(p => p.enableDisplay === 0);
+  let data = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId) && p.enableDisplay === 0);
   if (guide) data = data.filter(p => p.guideTitle === guide);
 
   const rowsHtml = data.length === 0
@@ -755,6 +810,159 @@ function runHiddenReport() {
     { label:'Page',         get: p => p.pageLabel },
     { label:'Guide',        get: p => p.guideTitle },
     { label:'Steward',      get: p => p.steward ?? '' },
+    { label:'Last updated', get: p => formatDate(p.updated) },
+    { label:'URL',          get: p => p.pageFriendlyUrl ?? '' },
+  ]));
+}
+
+// ── Report: Stale research guides ─────────────────────────────────
+function renderRgStalePanel(panel) {
+  const f = state.reportFilters['rg-stale'];
+  panel.innerHTML = `
+    <div class="report-panel">
+      <p class="report-panel-title">Stale guides report</p>
+      <div class="filter-row">
+        <label class="filter-label">Not updated since</label>
+        <input type="date" id="r-rgs-before" value="${f.olderThan}">
+        <select id="r-rgs-owner">
+          <option value="">All owners</option>
+          ${researchOwnerOpts(f.owner)}
+        </select>
+        <button class="btn-run" id="r-rgs-run">Run report</button>
+      </div>
+      <div id="r-rgs-results"></div>
+    </div>`;
+
+  el('r-rgs-before')?.addEventListener('change',  e => { state.reportFilters['rg-stale'].olderThan = e.target.value; });
+  el('r-rgs-owner')?.addEventListener('change',   e => { state.reportFilters['rg-stale'].owner     = e.target.value; });
+  el('r-rgs-run')?.addEventListener('click', () => runRgStaleReport());
+
+  if (f.olderThan || f.owner) runRgStaleReport();
+  else el('r-rgs-results').innerHTML = emptyPromptHtml();
+}
+
+function runRgStaleReport() {
+  const before = el('r-rgs-before')?.value  || '';
+  const owner  = el('r-rgs-owner')?.value   || '';
+  state.reportFilters['rg-stale'].olderThan = before;
+  state.reportFilters['rg-stale'].owner     = owner;
+
+  const pool = state.pages.filter(p => CONFIG.RESEARCH_GUIDE_GROUPS.includes(p.groupId));
+
+  // Group into guides
+  const guideMap = new Map();
+  for (const p of pool) {
+    if (!guideMap.has(p.guideId)) {
+      guideMap.set(p.guideId, { guideId: p.guideId, guideTitle: p.guideTitle, guideFriendlyUrl: p.guideFriendlyUrl, guideOwner: p.guideOwner, pages: [] });
+    }
+    guideMap.get(p.guideId).pages.push(p);
+  }
+
+  let guides = Array.from(guideMap.values()).map(g => {
+    const withDates = g.pages.filter(p => p.updated).sort((a,b) =>
+      (parseDate(a.updated)?.getTime() ?? 0) - (parseDate(b.updated)?.getTime() ?? 0)
+    );
+    const oldestUpdated = withDates.length ? withDates[0].updated : null;
+    const latestUpdated = withDates.length ? withDates[withDates.length - 1].updated : null;
+    return { ...g, pageCount: g.pages.length, oldestUpdated, latestUpdated, freshness: freshnessStatus(oldestUpdated) };
+  }).filter(g => g.freshness === 'stale' || g.freshness === 'very-stale');
+
+  if (owner) guides = guides.filter(g => g.guideOwner === owner);
+  if (before) {
+    const cutoff = new Date(before).getTime();
+    guides = guides.filter(g => { const d = parseDate(g.oldestUpdated); return d && d.getTime() < cutoff; });
+  }
+
+  guides.sort((a,b) => a.guideTitle.localeCompare(b.guideTitle));
+
+  const rowsHtml = guides.length === 0
+    ? `<div class="empty-state">No results.</div>`
+    : `<div class="result-actions">
+         <span class="result-count">${guides.length} result${guides.length !== 1 ? 's' : ''}</span>
+         <button class="btn-export" id="r-rgs-export">Export CSV</button>
+       </div>
+       <div class="table-wrap"><table>
+         <colgroup><col style="width:30%"><col style="width:20%"><col style="width:10%"><col style="width:20%"><col style="width:12%"><col style="width:8%"></colgroup>
+         <thead><tr><th>Guide</th><th>Owner</th><th>Pages</th><th>Oldest updated</th><th>Latest updated</th><th>Status</th></tr></thead>
+         <tbody>${guides.map(g => {
+           const titleHtml = g.guideFriendlyUrl
+             ? `<a class="page-link" href="${esc(g.guideFriendlyUrl)}" target="_blank" rel="noopener">${esc(g.guideTitle)}</a>`
+             : esc(g.guideTitle);
+           const dateClass = g.freshness === 'very-stale' ? 'date-very-stale' : 'date-stale';
+           return `<tr>
+             <td>${titleHtml}</td>
+             <td class="col-guide">${esc(g.guideOwner || '—')}</td>
+             <td>${g.pageCount}</td>
+             <td class="${dateClass}">${esc(formatDate(g.oldestUpdated))}</td>
+             <td class="col-guide">${esc(formatDate(g.latestUpdated))}</td>
+             <td>${freshnessBadge(g.freshness)}</td>
+           </tr>`;
+         }).join('')}</tbody>
+       </table></div>`;
+
+  el('r-rgs-results').innerHTML = rowsHtml;
+  el('r-rgs-export')?.addEventListener('click', () => exportCSV('stale-research-guides.csv', guides, [
+    { label:'Guide',          get: g => g.guideTitle },
+    { label:'Owner',          get: g => g.guideOwner ?? '' },
+    { label:'Pages',          get: g => g.pageCount },
+    { label:'Oldest updated', get: g => formatDate(g.oldestUpdated) },
+    { label:'Latest updated', get: g => formatDate(g.latestUpdated) },
+    { label:'Status',         get: g => g.freshness },
+    { label:'URL',            get: g => g.guideFriendlyUrl ?? '' },
+  ]));
+}
+
+// ── Report: Hidden pages in research guides ────────────────────────
+function renderRgHiddenPanel(panel) {
+  const f = state.reportFilters['rg-hidden'];
+  panel.innerHTML = `
+    <div class="report-panel">
+      <p class="report-panel-title">Hidden pages in research guides report</p>
+      <div class="filter-row">
+        <label class="filter-label">Guide</label>
+        <select id="r-rgh-guide">
+          <option value="">All guides</option>
+          ${researchGuideOpts(f.guide)}
+        </select>
+        <button class="btn-run" id="r-rgh-run">Run report</button>
+      </div>
+      <div id="r-rgh-results"></div>
+    </div>`;
+
+  el('r-rgh-guide')?.addEventListener('change', e => { state.reportFilters['rg-hidden'].guide = e.target.value; });
+  el('r-rgh-run')?.addEventListener('click', () => runRgHiddenReport());
+  el('r-rgh-results').innerHTML = emptyPromptHtml();
+}
+
+function runRgHiddenReport() {
+  const guide = el('r-rgh-guide')?.value || '';
+  state.reportFilters['rg-hidden'].guide = guide;
+
+  let data = state.pages.filter(p => CONFIG.RESEARCH_GUIDE_GROUPS.includes(p.groupId) && p.enableDisplay === 0);
+  if (guide) data = data.filter(p => p.guideTitle === guide);
+
+  const rowsHtml = data.length === 0
+    ? `<div class="empty-state">No results.</div>`
+    : `<div class="result-actions">
+         <span class="result-count">${data.length} result${data.length !== 1 ? 's' : ''}</span>
+         <button class="btn-export" id="r-rgh-export">Export CSV</button>
+       </div>
+       <div class="table-wrap"><table>
+         <colgroup><col style="width:28%"><col style="width:28%"><col style="width:22%"><col style="width:22%"></colgroup>
+         <thead><tr><th>Page</th><th>Guide</th><th>Owner</th><th>Last updated</th></tr></thead>
+         <tbody>${data.map(p => `<tr>
+           <td>${pageLink(p)}</td>
+           <td class="col-guide">${esc(p.guideTitle)}</td>
+           <td class="col-guide">${esc(p.guideOwner || '—')}</td>
+           ${dateTd(p.updated)}
+         </tr>`).join('')}</tbody>
+       </table></div>`;
+
+  el('r-rgh-results').innerHTML = rowsHtml;
+  el('r-rgh-export')?.addEventListener('click', () => exportCSV('hidden-research-pages.csv', data, [
+    { label:'Page',         get: p => p.pageLabel },
+    { label:'Guide',        get: p => p.guideTitle },
+    { label:'Owner',        get: p => p.guideOwner ?? '' },
     { label:'Last updated', get: p => formatDate(p.updated) },
     { label:'URL',          get: p => p.pageFriendlyUrl ?? '' },
   ]));
@@ -806,7 +1014,7 @@ function renderManageStewards() {
   container.innerHTML = `
     ${nameListHtml}
     <div class="topbar">
-      <span class="topbar-title">Manage Stewards</span>
+      <h1>Manage Stewards</h1>
       <select id="ms-guide">
         <option value="">All guides</option>
         ${state.pages

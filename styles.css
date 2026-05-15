@@ -191,11 +191,9 @@ select, input { font: inherit; }
   flex-shrink: 0;
 }
 
-.topbar-title {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--text);
+.topbar h1 {
   flex: 1;
+  margin: 0;
 }
 
 /* ── Content area ────────────────────────────────────────────────── */
@@ -289,7 +287,7 @@ select,
 input[type="date"] {
   font-size: 14px;
   padding: 5px 10px;
-  border: 0.5px solid var(--border);
+  border: 1px solid #9ca3af;
   border-radius: var(--radius-md);
   background: var(--main-bg);
   color: var(--text);
@@ -347,7 +345,7 @@ label.filter-label {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 1rem;
   table-layout: fixed;
 }
 
@@ -432,6 +430,17 @@ td.date-very-stale { color: var(--date-vstale); }
   font-size: 14px;
   padding: 2rem 0;
   text-align: center;
+}
+
+/* ── Report section label ────────────────────────────────────────── */
+.report-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 8px;
+  line-height: inherit;
 }
 
 /* ── Report cards (2×2 grid) ─────────────────────────────────────── */
