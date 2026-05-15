@@ -9,7 +9,6 @@ const state = {
   stewardship: {},    // page_id → { steward, deputy } from stewardship.json
   stewardshipDirty: false,
   manageFilters: { guide: '', status: 'all' },
-  allFilters:    { name: '', guide: '', status: 'all' },
   reportFilters: {
     stale:     { steward: '', olderThan: '' },
     unassigned:{ guide: '', missing: 'either' },
@@ -176,7 +175,8 @@ function processGuides(guides) {
         guideId:           guide.id,
         guideTitle,
         guideOwner:        ownerName,
-        groupId:           guide.group_id ?? null,
+        guideFriendlyUrl:  guide.friendly_url || null,
+        groupId:           guide.group_id != null ? Number(guide.group_id) : null,
         pageId:            page.id,
         pageLabel:         page.label || page.name || '(untitled)',
         pageFriendlyUrl:   page.friendly_url || null,
@@ -268,11 +268,106 @@ function renderMyWebsitePages() {
 }
 
 function renderMyResearchGuides() {
-  renderPersonView(
-    'my-research-guides',
-    'My Research Guides',
-    CONFIG.RESEARCH_GUIDE_GROUPS
-  );
+  const name = state.selectedName;
+  const container = el('view-my-research-guides');
+
+  const ownerNames = [...new Set(
+    state.pages
+      .filter(p => CONFIG.RESEARCH_GUIDE_GROUPS.includes(p.groupId) && p.guideOwner)
+      .map(p => p.guideOwner)
+  )].sort((a,b) => a.localeCompare(b));
+
+  const ownerOpts = ownerNames.map(n =>
+    `<option value="${esc(n)}" ${n === name ? 'selected':''}>${esc(n)}</option>`
+  ).join('');
+
+  const topbar = `
+    <div class="topbar">
+      <span class="topbar-title">My Research Guides</span>
+      <label class="filter-label" for="rg-name">Viewing as</label>
+      <select id="rg-name">
+        <option value="">— select name —</option>
+        ${ownerOpts}
+      </select>
+    </div>`;
+
+  const pool = state.pages.filter(p => CONFIG.RESEARCH_GUIDE_GROUPS.includes(p.groupId));
+
+  if (!name || !ownerNames.includes(name)) {
+    container.innerHTML = topbar + `
+      <div class="content">
+        <p class="select-prompt">Select your name above to view your research guides.</p>
+      </div>`;
+  } else {
+    const myPages = pool.filter(p => p.guideOwner === name);
+
+    // Group pages by guide
+    const guideMap = new Map();
+    for (const p of myPages) {
+      if (!guideMap.has(p.guideId)) {
+        guideMap.set(p.guideId, { guideId: p.guideId, guideTitle: p.guideTitle, guideFriendlyUrl: p.guideFriendlyUrl, pages: [] });
+      }
+      guideMap.get(p.guideId).pages.push(p);
+    }
+
+    const guides = Array.from(guideMap.values()).map(g => {
+      const withDates = g.pages.filter(p => p.updated).sort((a,b) =>
+        (parseDate(a.updated)?.getTime() ?? 0) - (parseDate(b.updated)?.getTime() ?? 0)
+      );
+      const oldestUpdated = withDates.length ? withDates[0].updated : null;
+      const latestUpdated = withDates.length ? withDates[withDates.length - 1].updated : null;
+      return { ...g, pageCount: g.pages.length, latestUpdated, freshness: freshnessStatus(oldestUpdated) };
+    }).sort((a,b) => a.guideTitle.localeCompare(b.guideTitle));
+
+    const needsUpdate = guides.filter(g => g.freshness !== 'current').length;
+
+    const rowsHtml = guides.length === 0
+      ? `<tr><td colspan="4"><div class="empty-state">No research guides owned by ${esc(name)}.</div></td></tr>`
+      : guides.map(g => {
+          const titleHtml = g.guideFriendlyUrl
+            ? `<a class="page-link" href="${esc(g.guideFriendlyUrl)}" target="_blank" rel="noopener">${esc(g.guideTitle)}</a>`
+            : esc(g.guideTitle);
+          const dateClass = g.freshness === 'very-stale' ? 'date-very-stale'
+                          : g.freshness === 'stale'      ? 'date-stale' : 'col-guide';
+          return `<tr>
+            <td>${titleHtml}</td>
+            <td>${g.pageCount}</td>
+            <td class="${dateClass}">${esc(formatDate(g.latestUpdated))}</td>
+            <td>${freshnessBadge(g.freshness)}</td>
+          </tr>`;
+        }).join('');
+
+    container.innerHTML = topbar + `
+      <div class="content">
+        <div class="metrics" style="grid-template-columns:repeat(2,1fr)">
+          <div class="metric">
+            <div class="metric-label">Guides owned</div>
+            <div class="metric-value">${guides.length}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Needs update</div>
+            <div class="metric-value${needsUpdate > 0 ? ' warn' : ''}">${needsUpdate}</div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <colgroup>
+              <col style="width:45%"><col style="width:12%">
+              <col style="width:28%"><col style="width:15%">
+            </colgroup>
+            <thead>
+              <tr><th>Guide</th><th>Pages</th><th>Last updated</th><th>Status</th></tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  el('rg-name')?.addEventListener('change', e => {
+    state.selectedName = e.target.value;
+    renderCurrentView();
+  });
 }
 
 function renderPersonView(viewId, title, groupIds) {
@@ -358,71 +453,6 @@ function renderPersonView(viewId, title, groupIds) {
     // Re-render whichever person view is active so the other picks up the name on next visit
     renderCurrentView();
   });
-}
-
-// ── View: All Pages ────────────────────────────────────────────────
-function renderAllPages() {
-  const f = state.allFilters;
-  let filtered = state.pages;
-  if (f.name)  filtered = filtered.filter(p => p.steward === f.name || p.deputy === f.name);
-  if (f.guide) filtered = filtered.filter(p => p.guideTitle === f.guide);
-  if (f.status === 'unassigned') {
-    filtered = filtered.filter(p => !p.steward);
-  } else if (f.status && f.status !== 'all') {
-    filtered = filtered.filter(p => p.freshness === f.status);
-  }
-
-  const rowsHtml = filtered.length === 0
-    ? `<tr><td colspan="5"><div class="empty-state">No pages match the current filters.</div></td></tr>`
-    : filtered.map(p => `<tr>
-        <td>${pageLink(p)}</td>
-        <td class="col-guide">${esc(p.guideTitle)}</td>
-        <td>${stewardCell(p.steward)}</td>
-        <td>${deputyCell(p.deputy)}</td>
-        ${dateTd(p.updated)}
-      </tr>`).join('');
-
-  const container = el('view-all-pages');
-  container.innerHTML = `
-    <div class="topbar">
-      <span class="topbar-title">All pages</span>
-      <select id="ap-name">
-        <option value="">All stewards</option>
-        ${nameOptions(f.name)}
-      </select>
-      <select id="ap-guide">
-        <option value="">All guides</option>
-        ${guideOpts(f.guide)}
-      </select>
-      <select id="ap-status">
-        <option value="all"        ${f.status==='all'        ?'selected':''}>All statuses</option>
-        <option value="current"    ${f.status==='current'    ?'selected':''}>Current</option>
-        <option value="stale"      ${f.status==='stale'      ?'selected':''}>Stale</option>
-        <option value="very-stale" ${f.status==='very-stale' ?'selected':''}>Very stale</option>
-        <option value="unassigned" ${f.status==='unassigned' ?'selected':''}>Unassigned</option>
-      </select>
-    </div>
-    <div class="content">
-      <div class="table-wrap">
-        <table>
-          <colgroup>
-            <col style="width:25%">
-            <col style="width:22%">
-            <col style="width:18%">
-            <col style="width:18%">
-            <col style="width:17%">
-          </colgroup>
-          <thead>
-            <tr><th>Page</th><th>Guide</th><th>Steward</th><th>Deputy</th><th>Last updated</th></tr>
-          </thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
-      </div>
-    </div>`;
-
-  el('ap-name')?.addEventListener('change',   e => { state.allFilters.name   = e.target.value; renderAllPages(); });
-  el('ap-guide')?.addEventListener('change',  e => { state.allFilters.guide  = e.target.value; renderAllPages(); });
-  el('ap-status')?.addEventListener('change', e => { state.allFilters.status = e.target.value; renderAllPages(); });
 }
 
 // ── View: Reports ──────────────────────────────────────────────────
@@ -925,7 +955,6 @@ function renderCurrentView() {
   switch (state.view) {
     case 'my-website-pages':   renderMyWebsitePages();   break;
     case 'my-research-guides': renderMyResearchGuides(); break;
-    case 'all-pages':          renderAllPages();         break;
     case 'reports':            renderReports();          break;
     case 'manage-stewards':    renderManageStewards();   break;
   }

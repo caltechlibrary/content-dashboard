@@ -10,17 +10,17 @@
   --danger-text:   #A32D2D;
   --info-bg:       #E6F1FB;
   --info-text:     #185FA5;
-  /* Date staleness colors from mockup */
-  --date-stale:    #BA7517;
-  --date-vstale:   #A32D2D;
+  /* Date staleness colors — darkened for 4.5:1 contrast on white */
+  --date-stale:    #7C4D00;
+  --date-vstale:   #9B1C1C;
   /* Link */
-  --link:          #185FA5;
+  --link:          #1446A0;
   /* Sidebar (light) */
   --sb-bg:         #f5f6f8;
   --sb-border:     #e5e7eb;
-  --sb-text:       #374151;
-  --sb-text-2:     #6b7280;
-  --sb-text-3:     #9ca3af;
+  --sb-text:       #1f2937;
+  --sb-text-2:     #374151;
+  --sb-text-3:     #4b5563;
   --sb-hover:      #ffffff;
   --sb-active:     #ffffff;
   /* Main area */
@@ -28,8 +28,8 @@
   --body-bg:       #ffffff;
   --border:        #e5e7eb;
   --text:          #111827;
-  --text-2:        #6b7280;
-  --text-3:        #9ca3af;
+  --text-2:        #374151;
+  --text-3:        #4b5563;
   --bg-secondary:  #f9fafb;
   --radius-sm:     4px;
   --radius-md:     6px;
@@ -38,7 +38,7 @@
 
 /* ── Reset ───────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: 14px; }
+html { font-size: 16px; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--body-bg);
@@ -79,13 +79,13 @@ select, input { font: inherit; }
 }
 
 .sidebar-logo p {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
   color: var(--sb-text);
 }
 
 .sidebar-logo span {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--sb-text-2);
 }
 
@@ -93,7 +93,7 @@ select, input { font: inherit; }
 .sidebar-nav { flex: 1; }
 
 .nav-section {
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: .08em;
   color: var(--sb-text-3);
@@ -105,7 +105,7 @@ select, input { font: inherit; }
   align-items: center;
   gap: 8px;
   padding: 7px 1rem;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--sb-text-2);
   border-left: 2px solid transparent;
   transition: background .12s, color .12s;
@@ -144,7 +144,7 @@ select, input { font: inherit; }
   color: var(--sb-text-2);
   border-radius: var(--radius-md);
   padding: 5px 10px;
-  font-size: 12px;
+  font-size: 13px;
   width: 100%;
   transition: background .12s;
 }
@@ -155,7 +155,7 @@ select, input { font: inherit; }
 }
 
 .last-fetched {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--sb-text-3);
   margin-top: 6px;
   text-align: center;
@@ -229,7 +229,7 @@ select, input { font: inherit; }
 
 .error-body svg { color: var(--danger-text); }
 .error-body h3 { font-size: 15px; color: var(--text); }
-.error-body p  { font-size: 13px; max-width: 320px; }
+.error-body p  { font-size: 14px; max-width: 320px; }
 
 /* ── Spinner ─────────────────────────────────────────────────────── */
 .spinner {
@@ -250,7 +250,7 @@ select, input { font: inherit; }
   border: none;
   border-radius: var(--radius-md);
   padding: 6px 16px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   transition: filter .12s;
 }
@@ -258,7 +258,7 @@ select, input { font: inherit; }
 .btn-primary:hover { filter: brightness(.92); }
 
 .btn-run {
-  font-size: 13px;
+  font-size: 14px;
   padding: 5px 14px;
   border: 0.5px solid var(--border);
   border-radius: var(--radius-md);
@@ -270,7 +270,7 @@ select, input { font: inherit; }
 .btn-run:hover { background: #f0f2f5; }
 
 .btn-export {
-  font-size: 12px;
+  font-size: 13px;
   padding: 4px 12px;
   border: 0.5px solid var(--border);
   border-radius: var(--radius-md);
@@ -287,7 +287,7 @@ select, input { font: inherit; }
 /* ── Form controls ───────────────────────────────────────────────── */
 select,
 input[type="date"] {
-  font-size: 13px;
+  font-size: 14px;
   padding: 5px 10px;
   border: 0.5px solid var(--border);
   border-radius: var(--radius-md);
@@ -304,7 +304,7 @@ input[type="date"]:focus {
 }
 
 label.filter-label {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-2);
 }
 
@@ -323,7 +323,7 @@ label.filter-label {
 }
 
 .metric-label {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-2);
   margin-bottom: 4px;
 }
@@ -347,7 +347,7 @@ label.filter-label {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 14px;
   table-layout: fixed;
 }
 
@@ -356,7 +356,7 @@ th {
   padding: 8px 12px;
   text-align: left;
   font-weight: 500;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-2);
   border-bottom: 0.5px solid var(--border);
   white-space: nowrap;
@@ -380,7 +380,7 @@ tr:hover td { background: var(--bg-secondary); }
 /* Page name link */
 td a.page-link {
   color: var(--link);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 td a.page-link:hover { text-decoration: underline; }
@@ -404,7 +404,7 @@ td.date-very-stale { color: var(--date-vstale); }
 .badge {
   display: inline-flex;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 8px;
   border-radius: 99px;
   font-weight: 500;
@@ -415,7 +415,7 @@ td.date-very-stale { color: var(--date-vstale); }
 .badge-warn    { background: var(--warn-bg);   color: var(--warn-text);   }
 .badge-danger  { background: var(--danger-bg); color: var(--danger-text); }
 .badge-info    { background: var(--info-bg);   color: var(--info-text);   }
-.badge-muted   { background: #f3f4f6;          color: #6b7280;            }
+.badge-muted   { background: #f3f4f6;          color: #374151;            }
 .badge-violet  { background: #f5f3ff;          color: #7c3aed;            }
 
 /* ── Empty state ─────────────────────────────────────────────────── */
@@ -423,13 +423,13 @@ td.date-very-stale { color: var(--date-vstale); }
   text-align: center;
   padding: 2rem;
   color: var(--text-2);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* ── Select-name prompt ──────────────────────────────────────────── */
 .select-prompt {
   color: var(--text-2);
-  font-size: 13px;
+  font-size: 14px;
   padding: 2rem 0;
   text-align: center;
 }
@@ -462,14 +462,14 @@ td.date-very-stale { color: var(--date-vstale); }
 }
 
 .report-card h3 {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   margin-bottom: 3px;
   color: var(--text);
 }
 
 .report-card p {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-2);
   line-height: 1.5;
 }
@@ -482,7 +482,7 @@ td.date-very-stale { color: var(--date-vstale); }
 }
 
 .report-panel-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   margin-bottom: 12px;
   color: var(--text);
@@ -504,7 +504,7 @@ td.date-very-stale { color: var(--date-vstale); }
 }
 
 .result-count {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-3);
   flex: 1;
 }
@@ -513,7 +513,7 @@ td.date-very-stale { color: var(--date-vstale); }
 .dirty-banner {
   background: var(--warn-bg);
   color: var(--warn-text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   padding: 8px 1.25rem;
   border-bottom: 0.5px solid #f0d9b0;
@@ -521,7 +521,7 @@ td.date-very-stale { color: var(--date-vstale); }
 }
 
 .manage-hint {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-2);
   line-height: 1.5;
 }
@@ -531,7 +531,7 @@ td.date-very-stale { color: var(--date-vstale); }
   border: 0.5px solid transparent;
   border-radius: var(--radius-sm);
   padding: 3px 6px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text);
   background: transparent;
   transition: border-color .12s, background .12s;
