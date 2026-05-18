@@ -5,7 +5,7 @@ const state = {
   pages: [],          // processed PageRecord[]
   names: [],          // sorted staff names (from /accounts, or derived from guide data)
   guideOptions: [],   // sorted unique guide titles
-  selectedName: '',   // shared across My Website Pages + My Research Guides
+  selectedName: '',   // shared across Website Pages + Research Guides
   stewardship: {},    // page_id → { steward, deputy } from stewardship.json
   stewardshipDirty: false,
   audit: {},          // 'page:{id}' | 'guide:{id}' → { links, accessibility, accuracy }
@@ -116,7 +116,7 @@ function pageLink(p) {
 function auditCells(key) {
   const a = state.audit[key] || {};
   return ['links', 'accessibility', 'accuracy'].map(field =>
-    `<td>
+    `<td class="col-audit-check">
       <input type="checkbox" class="audit-cb" aria-label="${field}"
         data-audit-key="${esc(key)}" data-field="${field}"
         ${a[field] ? 'checked' : ''}>
@@ -148,6 +148,42 @@ async function syncAudit(btnId) {
     freshBtn.textContent = '✓ Saved';
     setTimeout(() => { const b = el(btnId); if (b) { b.textContent = 'Save Audit'; b.disabled = false; } }, 1500);
   }
+}
+
+function auditTfoot(tbodyId, leadingCols) {
+  const fields = ['links', 'accessibility', 'accuracy'];
+  return `<tfoot><tr>
+    <td colspan="${leadingCols}"></td>
+    ${fields.map(f => `<td class="col-audit-check">
+      <a href="#" class="audit-clear-link" data-field="${f}" data-tbody="${tbodyId}">clear</a>
+    </td>`).join('')}
+  </tr></tfoot>`;
+}
+
+async function clearAuditField(field, tbodyId) {
+  const tbody = el(tbodyId);
+  if (!tbody) return;
+  const checkboxes = tbody.querySelectorAll(`.audit-cb[data-field="${field}"]`);
+  const keysToUpdate = [];
+  for (const cb of checkboxes) {
+    const key = cb.dataset.auditKey;
+    if (state.audit[key]?.[field]) {
+      state.audit[key] = { ...state.audit[key], [field]: false };
+      keysToUpdate.push(key);
+    }
+    cb.checked = false;
+  }
+  if (keysToUpdate.length === 0) return;
+  localStorage.setItem('audit_cache', JSON.stringify(state.audit));
+  await Promise.all(keysToUpdate.map(key => {
+    const [type, ...rest] = key.split(':');
+    const id = rest.join(':');
+    return fetch(`${CONFIG.WORKER_URL}/audit`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, id, checks: state.audit[key] }),
+    });
+  }));
 }
 
 async function saveAuditCheck(key, field, checked) {
@@ -389,13 +425,97 @@ function researchOwnerOpts(selected = '') {
   return owners.map(n => `<option value="${esc(n)}" ${n === selected ? 'selected':''}>${esc(n)}</option>`).join('');
 }
 
-// ── View: My Website Pages / My Research Guides ────────────────────
+// ── View: Website Pages ─────────────────────────────────────────
 function renderMyWebsitePages() {
-  renderPersonView(
-    'my-website-pages',
-    'My Website Pages',
-    CONFIG.WEBSITE_PAGE_GROUPS
-  );
+  const name = state.selectedName;
+  const container = el('view-my-website-pages');
+  const pool = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId));
+  const pages = name ? pool.filter(p => p.steward === name || p.deputy === name) : pool;
+  const needsUpdate = pages.filter(p => p.freshness !== 'current').length;
+
+  let metricsHtml;
+  if (name) {
+    const stewarded = pages.filter(p => p.steward === name).length;
+    const deputyOn  = pages.filter(p => p.deputy  === name).length;
+    const missDep   = pages.filter(p => p.steward === name && !p.deputy).length;
+    metricsHtml = `
+      <div class="metric"><div class="metric-label">Pages stewarded</div><div class="metric-value">${stewarded}</div></div>
+      <div class="metric"><div class="metric-label">Deputy on</div><div class="metric-value">${deputyOn}</div></div>
+      <div class="metric"><div class="metric-label">Needs update</div><div class="metric-value${needsUpdate > 0 ? ' danger' : ''}">${needsUpdate}</div></div>
+      <div class="metric"><div class="metric-label">Missing deputy</div><div class="metric-value${missDep > 0 ? ' danger' : ''}">${missDep}</div></div>`;
+  } else {
+    const assigned   = pool.filter(p => p.steward || p.deputy).length;
+    const unassigned = pool.filter(p => !p.steward && !p.deputy).length;
+    metricsHtml = `
+      <div class="metric"><div class="metric-label">Total pages</div><div class="metric-value">${pool.length}</div></div>
+      <div class="metric"><div class="metric-label">Assigned</div><div class="metric-value">${assigned}</div></div>
+      <div class="metric"><div class="metric-label">Unassigned</div><div class="metric-value${unassigned > 0 ? ' danger' : ''}">${unassigned}</div></div>
+      <div class="metric"><div class="metric-label">Needs update</div><div class="metric-value${needsUpdate > 0 ? ' danger' : ''}">${needsUpdate}</div></div>`;
+  }
+
+  const rowsHtml = pages.length === 0
+    ? `<tr><td colspan="7"><div class="empty-state">No pages found.</div></td></tr>`
+    : pages.map(p => {
+        const dateClass = p.freshness === 'very-stale' ? 'date-very-stale'
+                        : p.freshness === 'stale'      ? 'date-stale' : '';
+        const col3 = name
+          ? (() => { const isSteward = p.steward === name; const isDeputy = p.deputy === name;
+              return roleBadge((isSteward && isDeputy) ? 'both' : isSteward ? 'steward' : 'deputy'); })()
+          : `<span class="${p.steward ? '' : 'muted-italic'}">${esc(p.steward || 'Unassigned')}</span>`;
+        return `<tr>
+          <td>${pageLink(p)}</td>
+          <td class="col-guide">${esc(p.guideTitle)}</td>
+          <td>${col3}</td>
+          <td class="${dateClass}">${esc(formatDate(p.updated))}</td>
+          ${auditCells('page:' + p.pageId)}
+        </tr>`;
+      }).join('');
+
+  const col3Header = name ? 'Role' : 'Steward';
+
+  container.innerHTML = `
+    <div class="topbar"><h1>Website Pages</h1><button class="btn-primary" id="wp-audit-save">Save Audit</button></div>
+    <div class="content">
+      <div class="filter-row">
+        <label class="filter-label" for="wp-name">Filter To:</label>
+        <select id="wp-name">
+          <option value="">All Website Pages</option>
+          ${nameOptions(name)}
+        </select>
+        ${name ? '<a href="#" class="filter-reset-link" id="wp-reset">show all</a>' : ''}
+      </div>
+      <div class="metrics">${metricsHtml}</div>
+      <div class="table-wrap">
+        <table>
+          <colgroup>
+            <col style="width:28%"><col style="width:22%">
+            <col style="width:11%"><col style="width:18%">
+            <col style="width:7%"><col style="width:7%"><col style="width:7%">
+          </colgroup>
+          <thead>
+            <tr><th>Page</th><th>Guide</th><th>${col3Header}</th><th>Last updated</th>
+            <th class="col-audit-check">Links</th><th class="col-audit-check">A11y</th><th class="col-audit-check">Accuracy</th></tr>
+          </thead>
+          <tbody id="wp-audit-tbody">${rowsHtml}</tbody>
+          ${auditTfoot('wp-audit-tbody', 4)}
+        </table>
+      </div>
+    </div>`;
+
+  el('wp-name')?.addEventListener('change', e => { state.selectedName = e.target.value; renderCurrentView(); });
+  el('wp-reset')?.addEventListener('click', e => { e.preventDefault(); state.selectedName = ''; renderCurrentView(); });
+  el('wp-audit-tbody')?.addEventListener('change', e => {
+    const cb = e.target.closest('.audit-cb');
+    if (!cb) return;
+    saveAuditCheck(cb.dataset.auditKey, cb.dataset.field, cb.checked);
+  });
+  el('wp-audit-tbody')?.closest('table')?.addEventListener('click', e => {
+    const link = e.target.closest('.audit-clear-link');
+    if (!link) return;
+    e.preventDefault();
+    clearAuditField(link.dataset.field, link.dataset.tbody);
+  });
+  el('wp-audit-save')?.addEventListener('click', () => syncAudit('wp-audit-save'));
 }
 
 function renderMyResearchGuides() {
@@ -431,26 +551,26 @@ function renderMyResearchGuides() {
       ? `<a class="page-link" href="${esc(g.guideFriendlyUrl)}" target="_blank" rel="noopener">${esc(g.guideTitle)}</a>`
       : esc(g.guideTitle);
     const dateClass = g.freshness === 'very-stale' ? 'date-very-stale'
-                    : g.freshness === 'stale'      ? 'date-stale' : 'col-guide';
+                    : g.freshness === 'stale'      ? 'date-stale' : '';
     return `<tr>
       <td>${titleHtml}</td>
       <td>${esc(g.guideOwner || '—')}</td>
       <td class="col-count">${g.pageCount}</td>
       <td class="${dateClass}">${esc(formatDate(g.guideUpdated))}</td>
-      <td>${freshnessBadge(g.freshness)}</td>
       ${auditCells('guide:' + g.guideId)}
     </tr>`;
-  }).join('') || `<tr><td colspan="8"><div class="empty-state">No research guides found.</div></td></tr>`;
+  }).join('') || `<tr><td colspan="7"><div class="empty-state">No research guides found.</div></td></tr>`;
 
   container.innerHTML = `
     <div class="topbar"><h1>Research Guides</h1><button class="btn-primary" id="rg-audit-save">Save Audit</button></div>
     <div class="content">
       <div class="filter-row">
-        <label class="filter-label" for="rg-name">Filter Guides To:</label>
+        <label class="filter-label" for="rg-name">Filter To:</label>
         <select id="rg-name">
           <option value="">All Research Guides</option>
           ${ownerOpts}
         </select>
+        ${name ? '<a href="#" class="filter-reset-link" id="rg-reset">show all</a>' : ''}
       </div>
       <div class="metrics" style="grid-template-columns:repeat(2,1fr)">
         <div class="metric">
@@ -459,21 +579,22 @@ function renderMyResearchGuides() {
         </div>
         <div class="metric">
           <div class="metric-label">Needs update</div>
-          <div class="metric-value${needsUpdate > 0 ? ' warn' : ''}">${needsUpdate}</div>
+          <div class="metric-value${needsUpdate > 0 ? ' danger' : ''}">${needsUpdate}</div>
         </div>
       </div>
       <div class="table-wrap">
         <table>
           <colgroup>
-            <col style="width:26%"><col style="width:15%"><col style="width:8%">
-            <col style="width:20%"><col style="width:10%">
+            <col style="width:29%"><col style="width:18%"><col style="width:9%">
+            <col style="width:23%">
             <col style="width:7%"><col style="width:7%"><col style="width:7%">
           </colgroup>
           <thead>
-            <tr><th>Guide</th><th>Owner</th><th class="col-count">Pages</th><th>Last updated</th><th>Status</th>
-            <th>Links</th><th>A11y</th><th>Accuracy</th></tr>
+            <tr><th>Guide</th><th>Owner</th><th class="col-count">Pages</th><th>Last updated</th>
+            <th class="col-audit-check">Links</th><th class="col-audit-check">A11y</th><th class="col-audit-check">Accuracy</th></tr>
           </thead>
           <tbody id="rg-audit-tbody">${rowsHtml}</tbody>
+          ${auditTfoot('rg-audit-tbody', 4)}
         </table>
       </div>
     </div>`;
@@ -484,109 +605,19 @@ function renderMyResearchGuides() {
     saveAuditCheck(cb.dataset.auditKey, cb.dataset.field, cb.checked);
   });
 
+  el('rg-audit-tbody')?.closest('table')?.addEventListener('click', e => {
+    const link = e.target.closest('.audit-clear-link');
+    if (!link) return;
+    e.preventDefault();
+    clearAuditField(link.dataset.field, link.dataset.tbody);
+  });
+
   el('rg-audit-save')?.addEventListener('click', () => syncAudit('rg-audit-save'));
 
-  el('rg-name')?.addEventListener('change', e => {
-    state.selectedName = e.target.value;
-    renderCurrentView();
-  });
+  el('rg-name')?.addEventListener('change', e => { state.selectedName = e.target.value; renderCurrentView(); });
+  el('rg-reset')?.addEventListener('click', e => { e.preventDefault(); state.selectedName = ''; renderCurrentView(); });
 }
 
-function renderPersonView(viewId, title, groupIds) {
-  const name      = state.selectedName;
-  const container = el(`view-${viewId}`);
-
-  const topbar = `
-    <div class="topbar">
-      <h1>${esc(title)}</h1>
-      <label class="filter-label" for="mp-name-${viewId}">Viewing as</label>
-      <select id="mp-name-${viewId}">
-        <option value="">— select name —</option>
-        ${nameOptions(name)}
-      </select>
-      <button class="btn-primary" id="wp-audit-save">Save Audit</button>
-    </div>`;
-
-  const pool = state.pages.filter(p => groupIds.includes(p.groupId));
-
-  if (!name) {
-    container.innerHTML = topbar + `
-      <div class="content">
-        <p class="select-prompt">Select your name above to view your pages.</p>
-      </div>`;
-  } else {
-    const myPages     = pool.filter(p => p.steward === name || p.deputy === name);
-    const stewarded   = myPages.filter(p => p.steward === name).length;
-    const deputyOn    = myPages.filter(p => p.deputy  === name).length;
-    const needsUpdate = myPages.filter(p => p.freshness !== 'current').length;
-    const missDep     = myPages.filter(p => p.steward === name && !p.deputy).length;
-
-    const rowsHtml = myPages.length === 0
-      ? `<tr><td colspan="8"><div class="empty-state">No pages assigned to ${esc(name)}.</div></td></tr>`
-      : myPages.map(p => {
-          const isSteward = p.steward === name;
-          const isDeputy  = p.deputy  === name;
-          const role = (isSteward && isDeputy) ? 'both' : isSteward ? 'steward' : 'deputy';
-          return `<tr>
-            <td>${pageLink(p)}</td>
-            <td class="col-guide">${esc(p.guideTitle)}</td>
-            <td>${roleBadge(role)}</td>
-            <td class="col-guide">${esc(formatDate(p.updated))}</td>
-            <td>${freshnessBadge(p.freshness)}</td>
-            ${auditCells('page:' + p.pageId)}
-          </tr>`;
-        }).join('');
-
-    container.innerHTML = topbar + `
-      <div class="content">
-        <div class="metrics">
-          <div class="metric">
-            <div class="metric-label">Pages stewarded</div>
-            <div class="metric-value">${stewarded}</div>
-          </div>
-          <div class="metric">
-            <div class="metric-label">Deputy on</div>
-            <div class="metric-value">${deputyOn}</div>
-          </div>
-          <div class="metric">
-            <div class="metric-label">Needs update</div>
-            <div class="metric-value${needsUpdate > 0 ? ' warn' : ''}">${needsUpdate}</div>
-          </div>
-          <div class="metric">
-            <div class="metric-label">Missing deputy</div>
-            <div class="metric-value${missDep > 0 ? ' danger' : ''}">${missDep}</div>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <colgroup>
-              <col style="width:25%"><col style="width:20%">
-              <col style="width:10%"><col style="width:13%"><col style="width:11%">
-              <col style="width:7%"><col style="width:7%"><col style="width:7%">
-            </colgroup>
-            <thead>
-              <tr><th>Page</th><th>Guide</th><th>Role</th><th>Last updated</th><th>Status</th>
-              <th>Links</th><th>A11y</th><th>Accuracy</th></tr>
-            </thead>
-            <tbody id="wp-audit-tbody">${rowsHtml}</tbody>
-          </table>
-        </div>
-      </div>`;
-  }
-
-  el(`mp-name-${viewId}`)?.addEventListener('change', e => {
-    state.selectedName = e.target.value;
-    renderCurrentView();
-  });
-
-  el('wp-audit-tbody')?.addEventListener('change', e => {
-    const cb = e.target.closest('.audit-cb');
-    if (!cb) return;
-    saveAuditCheck(cb.dataset.auditKey, cb.dataset.field, cb.checked);
-  });
-
-  el('wp-audit-save')?.addEventListener('click', () => syncAudit('wp-audit-save'));
-}
 
 // ── View: Reports ──────────────────────────────────────────────────
 const WEBSITE_REPORTS = [
