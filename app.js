@@ -116,7 +116,7 @@ function pageLink(p) {
 function auditCells(key) {
   const a = state.audit[key] || {};
   return ['links', 'accessibility', 'accuracy'].map(field =>
-    `<td class="col-audit-check">
+    `<td>
       <input type="checkbox" class="audit-cb" aria-label="${field}"
         data-audit-key="${esc(key)}" data-field="${field}"
         ${a[field] ? 'checked' : ''}>
@@ -124,10 +124,37 @@ function auditCells(key) {
   ).join('');
 }
 
+async function syncAudit(btnId) {
+  const btn = el(btnId);
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  await new Promise(r => setTimeout(r, 2500));
+  try {
+    const ar = await fetch(`${CONFIG.WORKER_URL}/audit`);
+    if (ar.ok) {
+      const entries = await ar.json();
+      const kvAudit = {};
+      for (const { key, value } of entries) {
+        if (value) kvAudit[key] = value;
+      }
+      state.audit = { ...state.audit, ...kvAudit };
+      localStorage.setItem('audit_cache', JSON.stringify(state.audit));
+    }
+  } catch { /* keep local state */ }
+  renderCurrentView();
+  const freshBtn = el(btnId);
+  if (freshBtn) {
+    freshBtn.textContent = '✓ Saved';
+    setTimeout(() => { const b = el(btnId); if (b) { b.textContent = 'Save Audit'; b.disabled = false; } }, 1500);
+  }
+}
+
 async function saveAuditCheck(key, field, checked) {
   const current = { ...(state.audit[key] || {}) };
   current[field] = checked;
   state.audit[key] = current;
+  localStorage.setItem('audit_cache', JSON.stringify(state.audit));
   const [type, ...rest] = key.split(':');
   const id = rest.join(':');
   await fetch(`${CONFIG.WORKER_URL}/audit`, {
@@ -268,17 +295,25 @@ async function loadData(force = false) {
     }
   } catch { /* fall back to names derived from guide data */ }
 
-  // Load audit state from KV
+  // Load audit state — localStorage first (instant), then KV merged on top
+  try {
+    const local = localStorage.getItem('audit_cache');
+    if (local) state.audit = JSON.parse(local);
+  } catch { state.audit = {}; }
+
   try {
     const ar = await fetch(`${CONFIG.WORKER_URL}/audit`);
     if (ar.ok) {
       const entries = await ar.json();
-      state.audit = {};
+      const kvAudit = {};
       for (const { key, value } of entries) {
-        if (value) state.audit[key] = value;
+        if (value) kvAudit[key] = value;
       }
+      // KV wins so other people's changes come through; local fills in recent unsynced writes
+      state.audit = { ...state.audit, ...kvAudit };
+      localStorage.setItem('audit_cache', JSON.stringify(state.audit));
     }
-  } catch { /* audit unavailable — checkboxes will be unchecked */ }
+  } catch { /* KV unavailable — use local cache */ }
 
   if (!force) {
     const cached = sessionStorage.getItem(CONFIG.SESSION_KEY);
@@ -408,7 +443,7 @@ function renderMyResearchGuides() {
   }).join('') || `<tr><td colspan="8"><div class="empty-state">No research guides found.</div></td></tr>`;
 
   container.innerHTML = `
-    <div class="topbar"><h1>Research Guides</h1></div>
+    <div class="topbar"><h1>Research Guides</h1><button class="btn-primary" id="rg-audit-save">Save Audit</button></div>
     <div class="content">
       <div class="filter-row">
         <label class="filter-label" for="rg-name">Filter Guides To:</label>
@@ -435,8 +470,8 @@ function renderMyResearchGuides() {
             <col style="width:7%"><col style="width:7%"><col style="width:7%">
           </colgroup>
           <thead>
-            <tr><th>Guide</th><th>Owner</th><th class="col-count">Visible Pages</th><th>Last updated</th><th>Status</th>
-            <th class="col-audit-check">Links</th><th class="col-audit-check">A11y</th><th class="col-audit-check">Accuracy</th></tr>
+            <tr><th>Guide</th><th>Owner</th><th class="col-count">Pages</th><th>Last updated</th><th>Status</th>
+            <th>Links</th><th>A11y</th><th>Accuracy</th></tr>
           </thead>
           <tbody id="rg-audit-tbody">${rowsHtml}</tbody>
         </table>
@@ -448,6 +483,8 @@ function renderMyResearchGuides() {
     if (!cb) return;
     saveAuditCheck(cb.dataset.auditKey, cb.dataset.field, cb.checked);
   });
+
+  el('rg-audit-save')?.addEventListener('click', () => syncAudit('rg-audit-save'));
 
   el('rg-name')?.addEventListener('change', e => {
     state.selectedName = e.target.value;
@@ -467,6 +504,7 @@ function renderPersonView(viewId, title, groupIds) {
         <option value="">— select name —</option>
         ${nameOptions(name)}
       </select>
+      <button class="btn-primary" id="wp-audit-save">Save Audit</button>
     </div>`;
 
   const pool = state.pages.filter(p => groupIds.includes(p.groupId));
@@ -528,7 +566,7 @@ function renderPersonView(viewId, title, groupIds) {
             </colgroup>
             <thead>
               <tr><th>Page</th><th>Guide</th><th>Role</th><th>Last updated</th><th>Status</th>
-              <th class="col-audit-check">Links</th><th class="col-audit-check">A11y</th><th class="col-audit-check">Accuracy</th></tr>
+              <th>Links</th><th>A11y</th><th>Accuracy</th></tr>
             </thead>
             <tbody id="wp-audit-tbody">${rowsHtml}</tbody>
           </table>
@@ -546,6 +584,8 @@ function renderPersonView(viewId, title, groupIds) {
     if (!cb) return;
     saveAuditCheck(cb.dataset.auditKey, cb.dataset.field, cb.checked);
   });
+
+  el('wp-audit-save')?.addEventListener('click', () => syncAudit('wp-audit-save'));
 }
 
 // ── View: Reports ──────────────────────────────────────────────────
@@ -932,7 +972,7 @@ function runRgStaleReport() {
        </div>
        <div class="table-wrap"><table>
          <colgroup><col style="width:25%"><col style="width:20%"><col style="width:10%"><col style="width:20%"><col style="width:17%"><col style="width:8%"></colgroup>
-         <thead><tr><th>Guide</th><th>Owner</th><th class="col-count">Visible Pages</th><th>Oldest updated</th><th>Latest updated</th><th>Status</th></tr></thead>
+         <thead><tr><th>Guide</th><th>Owner</th><th class="col-count">Pages</th><th>Oldest updated</th><th>Latest updated</th><th>Status</th></tr></thead>
          <tbody>${guides.map(g => {
            const titleHtml = g.guideFriendlyUrl
              ? `<a class="page-link" href="${esc(g.guideFriendlyUrl)}" target="_blank" rel="noopener">${esc(g.guideTitle)}</a>`
@@ -953,7 +993,7 @@ function runRgStaleReport() {
   el('r-rgs-export')?.addEventListener('click', () => exportCSV('stale-research-guides.csv', guides, [
     { label:'Guide',          get: g => g.guideTitle },
     { label:'Owner',          get: g => g.guideOwner ?? '' },
-    { label:'Visible Pages',  get: g => g.pageCount },
+    { label:'',  get: g => g.pageCount },
     { label:'Oldest updated', get: g => formatDate(g.oldestUpdated) },
     { label:'Latest updated', get: g => formatDate(g.latestUpdated) },
     { label:'Status',         get: g => g.freshness },
@@ -1205,6 +1245,7 @@ function csvCell(v) { return '"' + String(v ?? '').replace(/"/g,'""') + '"'; }
 // ── Navigation ─────────────────────────────────────────────────────
 function switchView(view) {
   state.view = view;
+  localStorage.setItem('last_view', view);
   document.querySelectorAll('.nav-item[data-view]').forEach(n => {
     n.classList.toggle('active', n.dataset.view === view);
   });
@@ -1226,8 +1267,15 @@ function renderCurrentView() {
 
 // ── Init ───────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  const savedView = localStorage.getItem('last_view');
+  if (savedView) state.view = savedView;
+
+  // Hide all views; renderCurrentView will unhide the right one after data loads
+  document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+
   document.querySelectorAll('.nav-item[data-view]').forEach(item => {
     item.addEventListener('click', e => { e.preventDefault(); switchView(item.dataset.view); });
+    item.classList.toggle('active', item.dataset.view === state.view);
   });
   el('refresh-btn')?.addEventListener('click', () => loadData(true));
   el('retry-btn')?.addEventListener('click',   () => loadData(true));

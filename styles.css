@@ -254,6 +254,7 @@ select, input { font: inherit; }
 }
 
 .btn-primary:hover { filter: brightness(.92); }
+.btn-primary:disabled { opacity: .6; cursor: default; filter: none; }
 
 .btn-run {
   font-size: 14px;
@@ -266,6 +267,7 @@ select, input { font: inherit; }
 }
 
 .btn-run:hover { background: #f0f2f5; }
+
 
 .btn-export {
   font-size: 13px;
@@ -589,10 +591,6 @@ td.date-very-stale { color: var(--date-vstale); }
   border-color: #b8ddbf;
 }
 
-.steward-input:hover {
-  border-color: #9ca3af;
-}
-
 .steward-input:focus {
   outline: none;
   border-color: var(--teal);
@@ -601,6 +599,7 @@ td.date-very-stale { color: var(--date-vstale); }
 }
 
 .steward-input::placeholder { color: var(--text-3); font-style: italic; }
+.steward-input::-webkit-calendar-picker-indicator { display: none !important; }
 
 /* ── Responsive ──────────────────────────────────────────────────── */
 @media (max-width: 860px) {

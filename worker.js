@@ -40,7 +40,7 @@ async function getAccessToken(env) {
 function corsHeaders() {
   return {
     'Access-Control-Allow-Origin':  '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age':       '86400',
   };
@@ -128,7 +128,7 @@ async function saveAudit(request, env) {
 // GET /audit?prefix=page:  — returns all entries matching prefix
 async function listAudit(request, env) {
   const url = new URL(request.url);
-  const prefix = url.searchParams.get('prefix') || 'page:';
+  const prefix = url.searchParams.get('prefix') ?? '';
   const { keys } = await env.AUDIT.list({ prefix });
   const entries = await Promise.all(
     keys.map(async ({ name }) => {
@@ -145,7 +145,7 @@ async function resetAudit(request, env) {
   try { body = await request.json(); } catch {
     return jsonResponse({ error: 'Invalid JSON' }, 400);
   }
-  const prefix = body.prefix || 'page:';
+  const prefix = body.prefix ?? '';
   let cursor;
   do {
     const result = await env.AUDIT.list({ prefix, cursor });
