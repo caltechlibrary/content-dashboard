@@ -8,6 +8,7 @@ const state = {
   selectedName: '',   // shared across My Website Pages + My Research Guides
   stewardship: {},    // page_id → { steward, deputy } from stewardship.json
   stewardshipDirty: false,
+  audit: {},          // 'page:{id}' | 'guide:{id}' → { links, accessibility, accuracy }
   manageFilters: { guide: '', showAssigned: true, showUnassigned: true },
   reportFilters: {
     stale:      { steward: '', olderThan: '' },
@@ -110,6 +111,30 @@ function pageLink(p) {
   const redirectBadge = p.pageRedirectUrl ? ` <span class="badge badge-muted">redirected</span>` : '';
   const hiddenBadge   = String(p.enableDisplay) !== '1' ? ` <span class="badge badge-muted">hidden</span>` : '';
   return link + redirectBadge + hiddenBadge;
+}
+
+function auditCells(key) {
+  const a = state.audit[key] || {};
+  return ['links', 'accessibility', 'accuracy'].map(field =>
+    `<td class="col-audit-check">
+      <input type="checkbox" class="audit-cb" aria-label="${field}"
+        data-audit-key="${esc(key)}" data-field="${field}"
+        ${a[field] ? 'checked' : ''}>
+    </td>`
+  ).join('');
+}
+
+async function saveAuditCheck(key, field, checked) {
+  const current = { ...(state.audit[key] || {}) };
+  current[field] = checked;
+  state.audit[key] = current;
+  const [type, ...rest] = key.split(':');
+  const id = rest.join(':');
+  await fetch(`${CONFIG.WORKER_URL}/audit`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type, id, checks: current }),
+  });
 }
 
 function stewardCell(name) {
@@ -243,6 +268,18 @@ async function loadData(force = false) {
     }
   } catch { /* fall back to names derived from guide data */ }
 
+  // Load audit state from KV
+  try {
+    const ar = await fetch(`${CONFIG.WORKER_URL}/audit`);
+    if (ar.ok) {
+      const entries = await ar.json();
+      state.audit = {};
+      for (const { key, value } of entries) {
+        if (value) state.audit[key] = value;
+      }
+    }
+  } catch { /* audit unavailable — checkboxes will be unchecked */ }
+
   if (!force) {
     const cached = sessionStorage.getItem(CONFIG.SESSION_KEY);
     if (cached) {
@@ -366,8 +403,9 @@ function renderMyResearchGuides() {
       <td class="col-count">${g.pageCount}</td>
       <td class="${dateClass}">${esc(formatDate(g.guideUpdated))}</td>
       <td>${freshnessBadge(g.freshness)}</td>
+      ${auditCells('guide:' + g.guideId)}
     </tr>`;
-  }).join('') || `<tr><td colspan="5"><div class="empty-state">No research guides found.</div></td></tr>`;
+  }).join('') || `<tr><td colspan="8"><div class="empty-state">No research guides found.</div></td></tr>`;
 
   container.innerHTML = `
     <div class="topbar"><h1>Research Guides</h1></div>
@@ -392,16 +430,24 @@ function renderMyResearchGuides() {
       <div class="table-wrap">
         <table>
           <colgroup>
-            <col style="width:33%"><col style="width:18%"><col style="width:10%">
-            <col style="width:27%"><col style="width:12%">
+            <col style="width:26%"><col style="width:15%"><col style="width:8%">
+            <col style="width:20%"><col style="width:10%">
+            <col style="width:7%"><col style="width:7%"><col style="width:7%">
           </colgroup>
           <thead>
-            <tr><th>Guide</th><th>Owner</th><th class="col-count">Visible Pages</th><th>Last updated</th><th>Status</th></tr>
+            <tr><th>Guide</th><th>Owner</th><th class="col-count">Visible Pages</th><th>Last updated</th><th>Status</th>
+            <th class="col-audit-check">Links</th><th class="col-audit-check">A11y</th><th class="col-audit-check">Accuracy</th></tr>
           </thead>
-          <tbody>${rowsHtml}</tbody>
+          <tbody id="rg-audit-tbody">${rowsHtml}</tbody>
         </table>
       </div>
     </div>`;
+
+  el('rg-audit-tbody')?.addEventListener('change', e => {
+    const cb = e.target.closest('.audit-cb');
+    if (!cb) return;
+    saveAuditCheck(cb.dataset.auditKey, cb.dataset.field, cb.checked);
+  });
 
   el('rg-name')?.addEventListener('change', e => {
     state.selectedName = e.target.value;
@@ -438,7 +484,7 @@ function renderPersonView(viewId, title, groupIds) {
     const missDep     = myPages.filter(p => p.steward === name && !p.deputy).length;
 
     const rowsHtml = myPages.length === 0
-      ? `<tr><td colspan="5"><div class="empty-state">No pages assigned to ${esc(name)}.</div></td></tr>`
+      ? `<tr><td colspan="8"><div class="empty-state">No pages assigned to ${esc(name)}.</div></td></tr>`
       : myPages.map(p => {
           const isSteward = p.steward === name;
           const isDeputy  = p.deputy  === name;
@@ -449,6 +495,7 @@ function renderPersonView(viewId, title, groupIds) {
             <td>${roleBadge(role)}</td>
             <td class="col-guide">${esc(formatDate(p.updated))}</td>
             <td>${freshnessBadge(p.freshness)}</td>
+            ${auditCells('page:' + p.pageId)}
           </tr>`;
         }).join('');
 
@@ -475,13 +522,15 @@ function renderPersonView(viewId, title, groupIds) {
         <div class="table-wrap">
           <table>
             <colgroup>
-              <col style="width:30%"><col style="width:25%">
-              <col style="width:14%"><col style="width:16%"><col style="width:15%">
+              <col style="width:25%"><col style="width:20%">
+              <col style="width:10%"><col style="width:13%"><col style="width:11%">
+              <col style="width:7%"><col style="width:7%"><col style="width:7%">
             </colgroup>
             <thead>
-              <tr><th>Page</th><th>Guide</th><th>Role</th><th>Last updated</th><th>Status</th></tr>
+              <tr><th>Page</th><th>Guide</th><th>Role</th><th>Last updated</th><th>Status</th>
+              <th class="col-audit-check">Links</th><th class="col-audit-check">A11y</th><th class="col-audit-check">Accuracy</th></tr>
             </thead>
-            <tbody>${rowsHtml}</tbody>
+            <tbody id="wp-audit-tbody">${rowsHtml}</tbody>
           </table>
         </div>
       </div>`;
@@ -489,8 +538,13 @@ function renderPersonView(viewId, title, groupIds) {
 
   el(`mp-name-${viewId}`)?.addEventListener('change', e => {
     state.selectedName = e.target.value;
-    // Re-render whichever person view is active so the other picks up the name on next visit
     renderCurrentView();
+  });
+
+  el('wp-audit-tbody')?.addEventListener('change', e => {
+    const cb = e.target.closest('.audit-cb');
+    if (!cb) return;
+    saveAuditCheck(cb.dataset.auditKey, cb.dataset.field, cb.checked);
   });
 }
 

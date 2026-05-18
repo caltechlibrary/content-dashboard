@@ -4,3 +4,7 @@ compatibility_date = "2024-01-01"
 
 [observability]
 enabled = true
+
+[[kv_namespaces]]
+binding = "AUDIT"
+id = "11c661f3a1634813bea933f737ccee6c"

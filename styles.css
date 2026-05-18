@@ -397,6 +397,24 @@ td.col-guide {
 /* Centered count column */
 th.col-count, td.col-count { text-align: center; }
 
+/* Audit check columns */
+th.col-audit-check, td.col-audit-check {
+  text-align: center;
+  padding: 8px 4px;
+}
+
+th.col-audit-check {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+td.col-audit-check input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--teal);
+}
+
 /* Stale date coloring */
 td.date-stale      { color: var(--date-stale); }
 td.date-very-stale { color: var(--date-vstale); }

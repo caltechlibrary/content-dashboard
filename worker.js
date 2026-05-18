@@ -108,6 +108,53 @@ async function saveStewardship(request, env) {
   return jsonResponse({ ok: true });
 }
 
+// ── Audit KV helpers ───────────────────────────────────────────────
+
+// PUT /audit  { type: 'page'|'guide', id, checks: { links, accessibility, accuracy } }
+async function saveAudit(request, env) {
+  let body;
+  try { body = await request.json(); } catch {
+    return jsonResponse({ error: 'Invalid JSON' }, 400);
+  }
+  const { type, id, checks } = body;
+  if (!type || !id) return jsonResponse({ error: 'type and id required' }, 400);
+
+  const key = `${type}:${id}`;
+  const value = JSON.stringify({ ...checks, updatedAt: new Date().toISOString() });
+  await env.AUDIT.put(key, value);
+  return jsonResponse({ ok: true });
+}
+
+// GET /audit?prefix=page:  — returns all entries matching prefix
+async function listAudit(request, env) {
+  const url = new URL(request.url);
+  const prefix = url.searchParams.get('prefix') || 'page:';
+  const { keys } = await env.AUDIT.list({ prefix });
+  const entries = await Promise.all(
+    keys.map(async ({ name }) => {
+      const val = await env.AUDIT.get(name);
+      return { key: name, value: val ? JSON.parse(val) : null };
+    })
+  );
+  return jsonResponse(entries);
+}
+
+// DELETE /audit  { prefix }  — removes all keys with that prefix (audit reset)
+async function resetAudit(request, env) {
+  let body;
+  try { body = await request.json(); } catch {
+    return jsonResponse({ error: 'Invalid JSON' }, 400);
+  }
+  const prefix = body.prefix || 'page:';
+  let cursor;
+  do {
+    const result = await env.AUDIT.list({ prefix, cursor });
+    await Promise.all(result.keys.map(({ name }) => env.AUDIT.delete(name)));
+    cursor = result.list_complete ? null : result.cursor;
+  } while (cursor);
+  return jsonResponse({ ok: true });
+}
+
 // ── Main handler ───────────────────────────────────────────────────
 export default {
   async fetch(request, env) {
@@ -120,6 +167,13 @@ export default {
     // POST /stewardship → commit stewardship.json to GitHub
     if (request.method === 'POST' && pathname === '/stewardship') {
       return saveStewardship(request, env);
+    }
+
+    // Audit endpoints
+    if (pathname === '/audit') {
+      if (request.method === 'GET')    return listAudit(request, env);
+      if (request.method === 'PUT')    return saveAudit(request, env);
+      if (request.method === 'DELETE') return resetAudit(request, env);
     }
 
     if (request.method !== 'GET') {
