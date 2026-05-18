@@ -28,6 +28,15 @@ function esc(v) {
     .replace(/"/g,'&quot;');
 }
 
+function decodeEntities(str) {
+  return String(str ?? '')
+    .replace(/&amp;/g,'&')
+    .replace(/&lt;/g,'<')
+    .replace(/&gt;/g,'>')
+    .replace(/&quot;/g,'"')
+    .replace(/&#039;/g,"'");
+}
+
 function el(id) { return document.getElementById(id); }
 
 // LibGuides returns "YYYY-MM-DD HH:MM:SS" — treat as UTC.
@@ -95,9 +104,11 @@ function dateTd(updatedStr) {
 }
 
 function pageLink(p) {
-  return p.pageFriendlyUrl
+  const link = p.pageFriendlyUrl
     ? `<a class="page-link" href="${esc(p.pageFriendlyUrl)}" target="_blank" rel="noopener">${esc(p.pageLabel)}</a>`
     : esc(p.pageLabel);
+  const badge = p.pageRedirectUrl ? ` <span class="badge badge-muted">redirected</span>` : '';
+  return link + badge;
 }
 
 function stewardCell(name) {
@@ -143,7 +154,7 @@ function processGuides(guides) {
 
   for (const guide of guides) {
     if (!Array.isArray(guide.pages)) continue;
-    const guideTitle = guide.title || guide.name || '(untitled guide)';
+    const guideTitle = decodeEntities(guide.title || guide.name || '(untitled guide)');
     const ownerName = guide.owner
       ? `${guide.owner.first_name ?? ''} ${guide.owner.last_name ?? ''}`.trim()
       : null;
@@ -177,12 +188,14 @@ function processGuides(guides) {
         guideId:           guide.id,
         guideTitle,
         guideOwner:        ownerName,
-        guideFriendlyUrl:  guide.friendly_url || null,
+        guideFriendlyUrl:  guide.friendly_url || guide.url || null,
         groupId:           guide.group_id != null ? Number(guide.group_id) : null,
         pageId:            page.id,
         pageLabel:         page.label || page.name || '(untitled)',
-        pageFriendlyUrl:   page.friendly_url || null,
+        pageFriendlyUrl:   page.friendly_url || page.url || null,
+        pageRedirectUrl:   page.redirect_url || null,
         updated:           page.updated || null,
+        guideUpdated:      guide.updated || null,
         enableDisplay:     page.enable_display ?? 1,
         steward,
         deputy,
@@ -316,98 +329,78 @@ function renderMyResearchGuides() {
   const name = state.selectedName;
   const container = el('view-my-research-guides');
 
-  const ownerNames = [...new Set(
-    state.pages
-      .filter(p => CONFIG.RESEARCH_GUIDE_GROUPS.includes(p.groupId) && p.guideOwner)
-      .map(p => p.guideOwner)
-  )].sort((a,b) => a.localeCompare(b));
+  const pool = state.pages.filter(p => CONFIG.RESEARCH_GUIDE_GROUPS.includes(p.groupId));
 
+  // Build guide map from all guides
+  const allGuideMap = new Map();
+  for (const p of pool) {
+    if (!allGuideMap.has(p.guideId)) {
+      allGuideMap.set(p.guideId, { guideId: p.guideId, guideTitle: p.guideTitle, guideOwner: p.guideOwner, guideFriendlyUrl: p.guideFriendlyUrl, guideUpdated: p.guideUpdated, pages: [] });
+    }
+    allGuideMap.get(p.guideId).pages.push(p);
+  }
+
+  const allGuides = Array.from(allGuideMap.values()).map(g => {
+    const visiblePages = g.pages.filter(p => String(p.enableDisplay) === '1');
+    return { ...g, pageCount: visiblePages.length, freshness: freshnessStatus(g.guideUpdated) };
+  }).sort((a,b) => a.guideTitle.localeCompare(b.guideTitle));
+
+  const ownerNames = [...new Set(allGuides.map(g => g.guideOwner).filter(Boolean))].sort((a,b) => a.localeCompare(b));
   const ownerOpts = ownerNames.map(n =>
     `<option value="${esc(n)}" ${n === name ? 'selected':''}>${esc(n)}</option>`
   ).join('');
 
-  const topbar = `
-    <div class="topbar">
-      <h1>My Research Guides</h1>
-      <label class="filter-label" for="rg-name">Viewing as</label>
-      <select id="rg-name">
-        <option value="">— select name —</option>
-        ${ownerOpts}
-      </select>
+  const guides = name ? allGuides.filter(g => g.guideOwner === name) : allGuides;
+  const needsUpdate = guides.filter(g => g.freshness !== 'current').length;
+
+  const rowsHtml = guides.map(g => {
+    const titleHtml = g.guideFriendlyUrl
+      ? `<a class="page-link" href="${esc(g.guideFriendlyUrl)}" target="_blank" rel="noopener">${esc(g.guideTitle)}</a>`
+      : esc(g.guideTitle);
+    const dateClass = g.freshness === 'very-stale' ? 'date-very-stale'
+                    : g.freshness === 'stale'      ? 'date-stale' : 'col-guide';
+    return `<tr>
+      <td>${titleHtml}</td>
+      <td>${esc(g.guideOwner || '—')}</td>
+      <td class="col-count">${g.pageCount}</td>
+      <td class="${dateClass}">${esc(formatDate(g.guideUpdated))}</td>
+      <td>${freshnessBadge(g.freshness)}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5"><div class="empty-state">No research guides found.</div></td></tr>`;
+
+  container.innerHTML = `
+    <div class="topbar"><h1>Research Guides</h1></div>
+    <div class="content">
+      <div class="filter-row">
+        <label class="filter-label" for="rg-name">Filter Guides To:</label>
+        <select id="rg-name">
+          <option value="">All Research Guides</option>
+          ${ownerOpts}
+        </select>
+      </div>
+      <div class="metrics" style="grid-template-columns:repeat(2,1fr)">
+        <div class="metric">
+          <div class="metric-label">${name ? 'Guides owned' : 'Total guides'}</div>
+          <div class="metric-value">${guides.length}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Needs update</div>
+          <div class="metric-value${needsUpdate > 0 ? ' warn' : ''}">${needsUpdate}</div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <colgroup>
+            <col style="width:33%"><col style="width:18%"><col style="width:10%">
+            <col style="width:27%"><col style="width:12%">
+          </colgroup>
+          <thead>
+            <tr><th>Guide</th><th>Owner</th><th class="col-count">Visible Pages</th><th>Last updated</th><th>Status</th></tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
     </div>`;
-
-  const pool = state.pages.filter(p => CONFIG.RESEARCH_GUIDE_GROUPS.includes(p.groupId));
-
-  if (!name || !ownerNames.includes(name)) {
-    container.innerHTML = topbar + `
-      <div class="content">
-        <p class="select-prompt">Select your name above to view your research guides.</p>
-      </div>`;
-  } else {
-    const myPages = pool.filter(p => p.guideOwner === name);
-
-    // Group pages by guide
-    const guideMap = new Map();
-    for (const p of myPages) {
-      if (!guideMap.has(p.guideId)) {
-        guideMap.set(p.guideId, { guideId: p.guideId, guideTitle: p.guideTitle, guideFriendlyUrl: p.guideFriendlyUrl, pages: [] });
-      }
-      guideMap.get(p.guideId).pages.push(p);
-    }
-
-    const guides = Array.from(guideMap.values()).map(g => {
-      const withDates = g.pages.filter(p => p.updated).sort((a,b) =>
-        (parseDate(a.updated)?.getTime() ?? 0) - (parseDate(b.updated)?.getTime() ?? 0)
-      );
-      const oldestUpdated = withDates.length ? withDates[0].updated : null;
-      const latestUpdated = withDates.length ? withDates[withDates.length - 1].updated : null;
-      return { ...g, pageCount: g.pages.length, latestUpdated, freshness: freshnessStatus(oldestUpdated) };
-    }).sort((a,b) => a.guideTitle.localeCompare(b.guideTitle));
-
-    const needsUpdate = guides.filter(g => g.freshness !== 'current').length;
-
-    const rowsHtml = guides.length === 0
-      ? `<tr><td colspan="4"><div class="empty-state">No research guides owned by ${esc(name)}.</div></td></tr>`
-      : guides.map(g => {
-          const titleHtml = g.guideFriendlyUrl
-            ? `<a class="page-link" href="${esc(g.guideFriendlyUrl)}" target="_blank" rel="noopener">${esc(g.guideTitle)}</a>`
-            : esc(g.guideTitle);
-          const dateClass = g.freshness === 'very-stale' ? 'date-very-stale'
-                          : g.freshness === 'stale'      ? 'date-stale' : 'col-guide';
-          return `<tr>
-            <td>${titleHtml}</td>
-            <td>${g.pageCount}</td>
-            <td class="${dateClass}">${esc(formatDate(g.latestUpdated))}</td>
-            <td>${freshnessBadge(g.freshness)}</td>
-          </tr>`;
-        }).join('');
-
-    container.innerHTML = topbar + `
-      <div class="content">
-        <div class="metrics" style="grid-template-columns:repeat(2,1fr)">
-          <div class="metric">
-            <div class="metric-label">Guides owned</div>
-            <div class="metric-value">${guides.length}</div>
-          </div>
-          <div class="metric">
-            <div class="metric-label">Needs update</div>
-            <div class="metric-value${needsUpdate > 0 ? ' warn' : ''}">${needsUpdate}</div>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <colgroup>
-              <col style="width:45%"><col style="width:12%">
-              <col style="width:28%"><col style="width:15%">
-            </colgroup>
-            <thead>
-              <tr><th>Guide</th><th>Pages</th><th>Last updated</th><th>Status</th></tr>
-            </thead>
-            <tbody>${rowsHtml}</tbody>
-          </table>
-        </div>
-      </div>`;
-  }
 
   el('rg-name')?.addEventListener('change', e => {
     state.selectedName = e.target.value;
@@ -528,9 +521,9 @@ function renderReports() {
       <h1>Reports</h1>
     </div>
     <div class="content">
-      <h2 class="report-section-label">Website Pages</h2>
+      <h2>Website Pages</h2>
       <div class="report-grid">${WEBSITE_REPORTS.map(cardHtml).join('')}</div>
-      <h2 class="report-section-label" style="margin-top:1.25rem">Research Guides</h2>
+      <h2>Research Guides</h2>
       <div class="report-grid">${RESEARCH_REPORTS.map(cardHtml).join('')}</div>
       <div id="report-panel"></div>
     </div>`;
@@ -864,7 +857,8 @@ function runRgStaleReport() {
     );
     const oldestUpdated = withDates.length ? withDates[0].updated : null;
     const latestUpdated = withDates.length ? withDates[withDates.length - 1].updated : null;
-    return { ...g, pageCount: g.pages.length, oldestUpdated, latestUpdated, freshness: freshnessStatus(oldestUpdated) };
+    const visiblePages = g.pages.filter(p => String(p.enableDisplay) === '1');
+    return { ...g, pageCount: visiblePages.length, oldestUpdated, latestUpdated, freshness: freshnessStatus(oldestUpdated) };
   }).filter(g => g.freshness === 'stale' || g.freshness === 'very-stale');
 
   if (owner) guides = guides.filter(g => g.guideOwner === owner);
@@ -882,8 +876,8 @@ function runRgStaleReport() {
          <button class="btn-export" id="r-rgs-export">Export CSV</button>
        </div>
        <div class="table-wrap"><table>
-         <colgroup><col style="width:30%"><col style="width:20%"><col style="width:10%"><col style="width:20%"><col style="width:12%"><col style="width:8%"></colgroup>
-         <thead><tr><th>Guide</th><th>Owner</th><th>Pages</th><th>Oldest updated</th><th>Latest updated</th><th>Status</th></tr></thead>
+         <colgroup><col style="width:25%"><col style="width:20%"><col style="width:10%"><col style="width:20%"><col style="width:17%"><col style="width:8%"></colgroup>
+         <thead><tr><th>Guide</th><th>Owner</th><th class="col-count">Visible Pages</th><th>Oldest updated</th><th>Latest updated</th><th>Status</th></tr></thead>
          <tbody>${guides.map(g => {
            const titleHtml = g.guideFriendlyUrl
              ? `<a class="page-link" href="${esc(g.guideFriendlyUrl)}" target="_blank" rel="noopener">${esc(g.guideTitle)}</a>`
@@ -892,7 +886,7 @@ function runRgStaleReport() {
            return `<tr>
              <td>${titleHtml}</td>
              <td class="col-guide">${esc(g.guideOwner || '—')}</td>
-             <td>${g.pageCount}</td>
+             <td class="col-count">${g.pageCount}</td>
              <td class="${dateClass}">${esc(formatDate(g.oldestUpdated))}</td>
              <td class="col-guide">${esc(formatDate(g.latestUpdated))}</td>
              <td>${freshnessBadge(g.freshness)}</td>
@@ -904,7 +898,7 @@ function runRgStaleReport() {
   el('r-rgs-export')?.addEventListener('click', () => exportCSV('stale-research-guides.csv', guides, [
     { label:'Guide',          get: g => g.guideTitle },
     { label:'Owner',          get: g => g.guideOwner ?? '' },
-    { label:'Pages',          get: g => g.pageCount },
+    { label:'Visible Pages',  get: g => g.pageCount },
     { label:'Oldest updated', get: g => formatDate(g.oldestUpdated) },
     { label:'Latest updated', get: g => formatDate(g.latestUpdated) },
     { label:'Status',         get: g => g.freshness },

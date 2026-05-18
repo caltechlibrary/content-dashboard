@@ -394,6 +394,9 @@ td.col-guide {
   font-style: italic;
 }
 
+/* Centered count column */
+th.col-count, td.col-count { text-align: center; }
+
 /* Stale date coloring */
 td.date-stale      { color: var(--date-stale); }
 td.date-very-stale { color: var(--date-vstale); }
@@ -432,15 +435,13 @@ td.date-very-stale { color: var(--date-vstale); }
   text-align: center;
 }
 
-/* ── Report section label ────────────────────────────────────────── */
-.report-section-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+/* ── Report section headings ─────────────────────────────────────── */
+.content h2 {
   margin: 0 0 8px;
-  line-height: inherit;
+}
+
+.content .report-grid + h2 {
+  margin-top: 1.25rem;
 }
 
 /* ── Report cards (2×2 grid) ─────────────────────────────────────── */
