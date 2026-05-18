@@ -107,8 +107,9 @@ function pageLink(p) {
   const link = p.pageFriendlyUrl
     ? `<a class="page-link" href="${esc(p.pageFriendlyUrl)}" target="_blank" rel="noopener">${esc(p.pageLabel)}</a>`
     : esc(p.pageLabel);
-  const badge = p.pageRedirectUrl ? ` <span class="badge badge-muted">redirected</span>` : '';
-  return link + badge;
+  const redirectBadge = p.pageRedirectUrl ? ` <span class="badge badge-muted">redirected</span>` : '';
+  const hiddenBadge   = String(p.enableDisplay) !== '1' ? ` <span class="badge badge-muted">hidden</span>` : '';
+  return link + redirectBadge + hiddenBadge;
 }
 
 function stewardCell(name) {
@@ -1025,9 +1026,9 @@ function renderManageStewards() {
     ${dirtyBanner}
     <div class="content">
       <div class="filter-row">
-        <label class="filter-label" for="ms-guide">Filter to website:</label>
+        <label class="filter-label" for="ms-guide">Filter by Guide:</label>
         <select id="ms-guide">
-          <option value="">All Website Pages</option>
+          <option value="">All Pages</option>
           ${guideOptHtml}
         </select>
         <label class="checkbox-label">
