@@ -1,6 +1,6 @@
 /* ── Custom properties ───────────────────────────────────────────── */
 :root {
-  --teal:          #1D9E75;
+  --teal:          #1e8841;
   /* Exact badge palette from mockup */
   --warn-bg:       #FAEEDA;
   --warn-text:     #854F0B;
@@ -249,7 +249,7 @@ select, input { font: inherit; }
   border-radius: var(--radius-md);
   padding: 6px 16px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 700;
   transition: filter .12s;
 }
 
@@ -506,6 +506,16 @@ td.date-very-stale { color: var(--date-vstale); }
   flex-wrap: wrap;
 }
 
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+}
+
 .result-actions {
   display: flex;
   align-items: center;
@@ -538,24 +548,37 @@ td.date-very-stale { color: var(--date-vstale); }
 
 .steward-input {
   width: 100%;
-  border: 0.5px solid transparent;
+  border: 1px solid #d1d5db;
   border-radius: var(--radius-sm);
-  padding: 3px 6px;
+  padding: 3px 22px 3px 6px;
   font-size: 14px;
   color: var(--text);
   background: transparent;
-  transition: border-color .12s, background .12s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23c9cdd4' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  transition: border-color .12s, background-color .12s;
+}
+
+.steward-input:placeholder-shown {
+  background-color: #fffaf6;
+  border-color: #e8c9b0;
+}
+
+.steward-input:not(:placeholder-shown) {
+  background-color: #f6fdf7;
+  border-color: #b8ddbf;
 }
 
 .steward-input:hover {
-  border-color: var(--border);
-  background: var(--bg-secondary);
+  border-color: #9ca3af;
 }
 
 .steward-input:focus {
   outline: none;
   border-color: var(--teal);
-  background: #fff;
+  background-color: #fff;
   box-shadow: 0 0 0 2px rgba(29,158,117,.10);
 }
 

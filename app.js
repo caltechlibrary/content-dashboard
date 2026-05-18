@@ -8,7 +8,7 @@ const state = {
   selectedName: '',   // shared across My Website Pages + My Research Guides
   stewardship: {},    // page_id → { steward, deputy } from stewardship.json
   stewardshipDirty: false,
-  manageFilters: { guide: '', status: 'all' },
+  manageFilters: { guide: '', showAssigned: true, showUnassigned: true },
   reportFilters: {
     stale:      { steward: '', olderThan: '' },
     unassigned: { guide: '', missing: 'either' },
@@ -972,9 +972,10 @@ function renderManageStewards() {
   const container = el('view-manage-stewards');
 
   let filtered = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId));
-  if (f.guide)  filtered = filtered.filter(p => p.guideTitle === f.guide);
-  if (f.status === 'assigned')   filtered = filtered.filter(p => p.steward || p.deputy);
-  if (f.status === 'unassigned') filtered = filtered.filter(p => !p.steward && !p.deputy);
+  if (f.guide) filtered = filtered.filter(p => p.guideTitle === f.guide);
+  if (!f.showAssigned)   filtered = filtered.filter(p => !p.steward && !p.deputy);
+  if (!f.showUnassigned) filtered = filtered.filter(p => p.steward || p.deputy);
+  filtered = [...filtered].sort((a,b) => a.guideTitle.localeCompare(b.guideTitle));
 
   const dirtyBanner = state.stewardshipDirty ? `
     <div class="dirty-banner">
@@ -987,6 +988,14 @@ function renderManageStewards() {
       ${state.names.map(n => `<option value="${esc(n)}">`).join('')}
     </datalist>`;
 
+  const guideOptHtml = state.pages
+    .filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId))
+    .map(p => p.guideTitle)
+    .filter((t,i,a) => t && a.indexOf(t) === i)
+    .sort()
+    .map(t => `<option value="${esc(t)}" ${t === f.guide ? 'selected' : ''}>${esc(t)}</option>`)
+    .join('');
+
   const rowsHtml = filtered.length === 0
     ? `<tr><td colspan="4"><div class="empty-state">No pages match the current filters.</div></td></tr>`
     : filtered.map(p => `
@@ -996,12 +1005,14 @@ function renderManageStewards() {
           <td>
             <input class="steward-input" type="text" list="${nameListId}"
               data-field="steward" data-page-id="${p.pageId}"
-              value="${esc(p.steward || '')}" placeholder="— unassigned —">
+              aria-label="Steward for ${esc(p.pageLabel)}"
+              value="${esc(p.steward || '')}" placeholder="unassigned">
           </td>
           <td>
             <input class="steward-input" type="text" list="${nameListId}"
               data-field="deputy" data-page-id="${p.pageId}"
-              value="${esc(p.deputy || '')}" placeholder="— unassigned —">
+              aria-label="Deputy for ${esc(p.pageLabel)}"
+              value="${esc(p.deputy || '')}" placeholder="unassigned">
           </td>
         </tr>`).join('');
 
@@ -1009,28 +1020,24 @@ function renderManageStewards() {
     ${nameListHtml}
     <div class="topbar">
       <h1>Manage Stewards</h1>
-      <select id="ms-guide">
-        <option value="">All guides</option>
-        ${state.pages
-            .filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId))
-            .map(p => p.guideTitle)
-            .filter((t,i,a) => t && a.indexOf(t) === i)
-            .sort()
-            .map(t => `<option value="${esc(t)}" ${t === f.guide ? 'selected' : ''}>${esc(t)}</option>`)
-            .join('')}
-      </select>
-      <select id="ms-status">
-        <option value="all"        ${f.status==='all'        ?'selected':''}>All pages</option>
-        <option value="unassigned" ${f.status==='unassigned' ?'selected':''}>Unassigned</option>
-        <option value="assigned"   ${f.status==='assigned'   ?'selected':''}>Assigned</option>
-      </select>
-      <span style="flex:1"></span>
       <button class="btn-primary" id="ms-save">Save to GitHub</button>
     </div>
     ${dirtyBanner}
     <div class="content">
-      <p class="manage-hint">Edit steward and deputy names below. Names autocomplete from guide owners. When done, click <strong>Download stewardship.json</strong>, then commit the file to your repository.</p>
-      <div class="table-wrap" style="margin-top:12px">
+      <div class="filter-row">
+        <label class="filter-label" for="ms-guide">Filter to website:</label>
+        <select id="ms-guide">
+          <option value="">All Website Pages</option>
+          ${guideOptHtml}
+        </select>
+        <label class="checkbox-label">
+          <input type="checkbox" id="ms-show-assigned" ${f.showAssigned ? 'checked' : ''}> Assigned
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="ms-show-unassigned" ${f.showUnassigned ? 'checked' : ''}> Unassigned
+        </label>
+      </div>
+      <div class="table-wrap">
         <table>
           <colgroup>
             <col style="width:28%"><col style="width:30%">
@@ -1044,9 +1051,9 @@ function renderManageStewards() {
       </div>
     </div>`;
 
-  // Filter listeners — re-render table section only
-  el('ms-guide')?.addEventListener('change', e => { state.manageFilters.guide  = e.target.value; renderManageStewards(); });
-  el('ms-status')?.addEventListener('change', e => { state.manageFilters.status = e.target.value; renderManageStewards(); });
+  el('ms-guide')?.addEventListener('change', e => { state.manageFilters.guide = e.target.value; renderManageStewards(); });
+  el('ms-show-assigned')?.addEventListener('change', e => { state.manageFilters.showAssigned = e.target.checked; renderManageStewards(); });
+  el('ms-show-unassigned')?.addEventListener('change', e => { state.manageFilters.showUnassigned = e.target.checked; renderManageStewards(); });
 
   // Inline edit — event delegation on tbody
   el('ms-tbody')?.addEventListener('change', e => {
