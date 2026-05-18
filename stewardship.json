@@ -11,6 +11,22 @@
     "steward": "Peter Collopy",
     "deputy": "Penny Neder-Muro"
   },
+  "9010754": {
+    "steward": "Jocelyn Yamasaki",
+    "deputy": "Catherine Geard"
+  },
+  "9010764": {
+    "steward": "Becky McKinney",
+    "deputy": ""
+  },
+  "9010765": {
+    "steward": "Kristin Briney",
+    "deputy": ""
+  },
+  "9010766": {
+    "steward": "Catherine Geard",
+    "deputy": ""
+  },
   "9011108": {
     "steward": "Alvaro Quezada",
     "deputy": "Becky McKinney"
@@ -31,6 +47,18 @@
     "steward": "Paula Gaetos",
     "deputy": ""
   },
+  "9027804": {
+    "steward": "",
+    "deputy": "Viet Nguyen"
+  },
+  "9027806": {
+    "steward": "Donna Wrublewski",
+    "deputy": "Donna Wrublewski"
+  },
+  "9027809": {
+    "steward": "Adriana Popescu",
+    "deputy": "Twila Smith"
+  },
   "9028032": {
     "steward": "Donna Wrublewski",
     "deputy": "Tom Morrell"
@@ -38,6 +66,14 @@
   "9029119": {
     "steward": "",
     "deputy": "Donna Wrublewski"
+  },
+  "9061524": {
+    "steward": "Becky McKinney",
+    "deputy": ""
+  },
+  "9090165": {
+    "steward": "Alvaro Quezada",
+    "deputy": "Viet Nguyen"
   },
   "9113838": {
     "steward": "Donna Wrublewski",
@@ -54,6 +90,34 @@
   "9119295": {
     "steward": "Peter Collopy",
     "deputy": "Penny Neder-Muro"
+  },
+  "9297411": {
+    "steward": "",
+    "deputy": "Catherine Geard"
+  },
+  "9470865": {
+    "steward": "Kristin Briney",
+    "deputy": ""
+  },
+  "9470868": {
+    "steward": "Kristin Briney",
+    "deputy": ""
+  },
+  "9470870": {
+    "steward": "Kristin Briney",
+    "deputy": ""
+  },
+  "9470871": {
+    "steward": "Kristin Briney",
+    "deputy": "Olivia Warschaw"
+  },
+  "9470872": {
+    "steward": "Kristin Briney",
+    "deputy": "Tony Diaz"
+  },
+  "9470873": {
+    "steward": "Peter Collopy",
+    "deputy": "Kristin Briney"
   },
   "10020094": {
     "steward": "Ian Roberts",
@@ -78,5 +142,9 @@
   "11204403": {
     "steward": "Peter Collopy",
     "deputy": "Penny Neder-Muro"
+  },
+  "11310049": {
+    "steward": "Adriana Popescu",
+    "deputy": "Twila Smith"
   }
 }
