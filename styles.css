@@ -79,13 +79,13 @@ select, input { font: inherit; }
 }
 
 .sidebar-logo p {
-  font-size: 15px;
+  font-size: 1rem;
   font-weight: 500;
   color: var(--sb-text);
 }
 
 .sidebar-logo span {
-  font-size: 13px;
+  font-size: 1rem;
   color: var(--sb-text-2);
 }
 
@@ -93,7 +93,7 @@ select, input { font: inherit; }
 .sidebar-nav { flex: 1; }
 
 .nav-section {
-  font-size: 11px;
+  font-size: 1rem;
   text-transform: uppercase;
   letter-spacing: .08em;
   color: var(--sb-text-3);
@@ -105,7 +105,7 @@ select, input { font: inherit; }
   align-items: center;
   gap: 8px;
   padding: 7px 1rem;
-  font-size: 14px;
+  font-size: 1rem;
   color: var(--sb-text-2);
   border-left: 2px solid transparent;
   transition: background .12s, color .12s;
@@ -144,7 +144,7 @@ select, input { font: inherit; }
   color: var(--sb-text-2);
   border-radius: var(--radius-md);
   padding: 5px 10px;
-  font-size: 13px;
+  font-size: 1rem;
   width: 100%;
   transition: background .12s;
 }
@@ -155,7 +155,7 @@ select, input { font: inherit; }
 }
 
 .last-fetched {
-  font-size: 12px;
+  font-size: 1rem;
   color: var(--sb-text-3);
   margin-top: 6px;
   text-align: center;
@@ -226,8 +226,8 @@ select, input { font: inherit; }
 }
 
 .error-body svg { color: var(--danger-text); }
-.error-body h3 { font-size: 15px; color: var(--text); }
-.error-body p  { font-size: 14px; max-width: 320px; }
+.error-body h3 { font-size: 1.125rem; color: var(--text); }
+.error-body p  { font-size: 1rem; max-width: 320px; }
 
 /* ── Spinner ─────────────────────────────────────────────────────── */
 .spinner {
@@ -248,7 +248,7 @@ select, input { font: inherit; }
   border: none;
   border-radius: var(--radius-md);
   padding: 6px 16px;
-  font-size: 14px;
+  font-size: 1rem;
   font-weight: 700;
   transition: filter .12s;
 }
@@ -257,7 +257,7 @@ select, input { font: inherit; }
 .btn-primary:disabled { opacity: .6; cursor: default; filter: none; }
 
 .btn-run {
-  font-size: 14px;
+  font-size: 1rem;
   padding: 5px 14px;
   border: 0.5px solid var(--border);
   border-radius: var(--radius-md);
@@ -270,7 +270,7 @@ select, input { font: inherit; }
 
 
 .btn-export {
-  font-size: 13px;
+  font-size: 1rem;
   padding: 4px 12px;
   border: 0.5px solid var(--border);
   border-radius: var(--radius-md);
@@ -287,7 +287,7 @@ select, input { font: inherit; }
 /* ── Form controls ───────────────────────────────────────────────── */
 select,
 input[type="date"] {
-  font-size: 14px;
+  font-size: 1rem;
   padding: 5px 10px;
   border: 1px solid #9ca3af;
   border-radius: var(--radius-md);
@@ -304,7 +304,7 @@ input[type="date"]:focus {
 }
 
 label.filter-label {
-  font-size: 13px;
+  font-size: 1rem;
   color: var(--text-2);
 }
 
@@ -323,13 +323,13 @@ label.filter-label {
 }
 
 .metric-label {
-  font-size: 13px;
+  font-size: 1rem;
   color: var(--text-2);
   margin-bottom: 4px;
 }
 
 .metric-value {
-  font-size: 22px;
+  font-size: 1.5rem;
   font-weight: 500;
   color: var(--text);
 }
@@ -356,7 +356,7 @@ th {
   padding: 8px 12px;
   text-align: left;
   font-weight: 500;
-  font-size: 13px;
+  font-size: 1rem;
   color: var(--text-2);
   border-bottom: 0.5px solid var(--border);
   white-space: nowrap;
@@ -385,7 +385,7 @@ tr:hover td { background: var(--bg-secondary); }
 /* Page name link */
 td a.page-link {
   color: var(--link);
-  font-size: 14px;
+  font-size: 1rem;
 }
 
 td a.page-link:hover { text-decoration: underline; }
@@ -406,14 +406,14 @@ th.col-count, td.col-count { text-align: center; }
 
 /* Audit clear link in tfoot */
 .filter-reset-link {
-  font-size: 13px;
+  font-size: 1rem;
   color: var(--text-3);
   text-decoration: none;
 }
 .filter-reset-link:hover { color: var(--link); text-decoration: underline; }
 
 .audit-clear-link {
-  font-size: 11px;
+  font-size: 1rem;
   color: var(--text-3);
   text-decoration: none;
 }
@@ -444,7 +444,7 @@ td.date-very-stale { color: var(--date-vstale); }
 .badge {
   display: inline-flex;
   align-items: center;
-  font-size: 12px;
+  font-size: 1rem;
   padding: 2px 8px;
   border-radius: 99px;
   font-weight: 500;
@@ -463,32 +463,47 @@ td.date-very-stale { color: var(--date-vstale); }
   text-align: center;
   padding: 2rem;
   color: var(--text-2);
-  font-size: 14px;
+  font-size: 1rem;
 }
 
 /* ── Select-name prompt ──────────────────────────────────────────── */
 .select-prompt {
   color: var(--text-2);
-  font-size: 14px;
+  font-size: 1rem;
   padding: 2rem 0;
   text-align: center;
 }
 
-/* ── Report section headings ─────────────────────────────────────── */
+/* ── Global heading scale ────────────────────────────────────────── */
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1.125rem; }
+
 .content h2 {
   margin: 0 0 8px;
 }
 
-.content .report-grid + h2 {
-  margin-top: 1.25rem;
-}
-
-/* ── Report cards (2×2 grid) ─────────────────────────────────────── */
-.report-grid {
+/* ── Report two-column layout ────────────────────────────────────── */
+.report-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 1.5rem;
   margin-bottom: 1.25rem;
+}
+
+.report-col-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-3);
+  margin-bottom: 0.75rem;
+}
+
+/* ── Report cards ────────────────────────────────────────────────── */
+.report-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
 }
 
 .report-card {
@@ -497,28 +512,29 @@ td.date-very-stale { color: var(--date-vstale); }
   padding: 1rem;
   cursor: pointer;
   transition: border-color .15s;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
 }
 
 .report-card:hover { border-color: #9ca3af; }
 .report-card.active { border-color: var(--teal); }
 
 .report-card-icon {
-  font-size: 18px;
-  color: var(--text-2);
-  margin-bottom: 6px;
-  display: block;
-  line-height: 1;
+  font-size: 1.25rem;
+  line-height: 1.4;
+  flex-shrink: 0;
 }
 
 .report-card h3 {
-  font-size: 14px;
+  font-size: 1.125rem;
   font-weight: 500;
   margin-bottom: 3px;
   color: var(--text);
 }
 
 .report-card p {
-  font-size: 13px;
+  font-size: 1rem;
   color: var(--text-2);
   line-height: 1.5;
 }
@@ -531,7 +547,7 @@ td.date-very-stale { color: var(--date-vstale); }
 }
 
 .report-panel-title {
-  font-size: 14px;
+  font-size: 1.125rem;
   font-weight: 500;
   margin-bottom: 12px;
   color: var(--text);
@@ -549,7 +565,7 @@ td.date-very-stale { color: var(--date-vstale); }
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 14px;
+  font-size: 1rem;
   color: var(--text-2);
   cursor: pointer;
   user-select: none;
@@ -563,7 +579,7 @@ td.date-very-stale { color: var(--date-vstale); }
 }
 
 .result-count {
-  font-size: 13px;
+  font-size: 1rem;
   color: var(--text-3);
   flex: 1;
 }
@@ -572,7 +588,7 @@ td.date-very-stale { color: var(--date-vstale); }
 .dirty-banner {
   background: var(--warn-bg);
   color: var(--warn-text);
-  font-size: 13px;
+  font-size: 1rem;
   font-weight: 500;
   padding: 8px 1.25rem;
   border-bottom: 0.5px solid #f0d9b0;
@@ -580,7 +596,7 @@ td.date-very-stale { color: var(--date-vstale); }
 }
 
 .manage-hint {
-  font-size: 13px;
+  font-size: 1rem;
   color: var(--text-2);
   line-height: 1.5;
 }
@@ -590,7 +606,7 @@ td.date-very-stale { color: var(--date-vstale); }
   border: 1px solid #d1d5db;
   border-radius: var(--radius-sm);
   padding: 3px 22px 3px 6px;
-  font-size: 14px;
+  font-size: 1rem;
   color: var(--text);
   background: transparent;
   appearance: none;
@@ -653,5 +669,5 @@ td.date-very-stale { color: var(--date-vstale); }
   }
 
   .metrics { grid-template-columns: repeat(2, 1fr); }
-  .report-grid { grid-template-columns: 1fr; }
+  .report-columns { grid-template-columns: 1fr; }
 }

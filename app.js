@@ -698,15 +698,13 @@ function renderMyResearchGuides() {
 
 // ── View: Reports ──────────────────────────────────────────────────
 const WEBSITE_REPORTS = [
-  { id:'stale',      icon:'🕐', title:'Stale content',              desc:'Pages not updated since a specified date. Good for identifying maintenance priorities.' },
-  { id:'unassigned', icon:'👤', title:'Unassigned pages',            desc:'Pages missing a content expert, web editor, or both. Run before committee check-ins.' },
-  { id:'missing',    icon:'⚠️', title:'Missing stewardship record',  desc:'Pages with no stewardship record at all. Requires manual remediation.' },
-  { id:'hidden',     icon:'🙈', title:'Hidden pages',                desc:'Pages with display disabled. May be drafts or retired content worth reviewing.' },
+  { id:'stale',  icon:'🕐', title:'Stale content', desc:'Pages not updated recently. Good for identifying maintenance priorities.' },
+  { id:'hidden', icon:'🙈', title:'Hidden pages',  desc:'Pages that are hidden. May be drafts or retired content worth reviewing.' },
 ];
 
 const RESEARCH_REPORTS = [
-  { id:'rg-stale',  icon:'🕐', title:'Stale guides',   desc:'Guides with pages not updated since a specified date.' },
-  { id:'rg-hidden', icon:'🙈', title:'Hidden pages',    desc:'Pages with display disabled within research guides.' },
+  { id:'rg-stale',  icon:'🕐', title:'Stale guides',   desc:'Guides not updated recently. Good for identifying maintenance priorities.' },
+  { id:'rg-hidden', icon:'🙈', title:'Hidden pages',    desc:'Guides with hidden pages. May be drafts or retired content worth reviewing.' },
 ];
 
 function renderReports() {
@@ -715,8 +713,10 @@ function renderReports() {
   const cardHtml = r => `
     <div class="report-card ${r.id === state.report ? 'active' : ''}" data-report="${r.id}" role="button" tabindex="0">
       <span class="report-card-icon">${r.icon}</span>
-      <h3>${r.title}</h3>
-      <p>${r.desc}</p>
+      <div>
+        <h3>${r.title}</h3>
+        <p>${r.desc}</p>
+      </div>
     </div>`;
 
   container.innerHTML = `
@@ -724,10 +724,16 @@ function renderReports() {
       <h1>Reports</h1>
     </div>
     <div class="content">
-      <h2>Website Pages</h2>
-      <div class="report-grid">${WEBSITE_REPORTS.map(cardHtml).join('')}</div>
-      <h2>Research Guides</h2>
-      <div class="report-grid">${RESEARCH_REPORTS.map(cardHtml).join('')}</div>
+      <div class="report-columns">
+        <div class="report-col">
+          <h2 class="report-col-heading">Website Pages</h2>
+          <div class="report-grid">${WEBSITE_REPORTS.map(cardHtml).join('')}</div>
+        </div>
+        <div class="report-col">
+          <h2 class="report-col-heading">Research Guides</h2>
+          <div class="report-grid">${RESEARCH_REPORTS.map(cardHtml).join('')}</div>
+        </div>
+      </div>
       <div id="report-panel"></div>
     </div>`;
 
@@ -981,7 +987,7 @@ function runHiddenReport() {
   const guide = el('r-hp-guide')?.value || '';
   state.reportFilters.hidden.guide = guide;
 
-  let data = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId) && p.enableDisplay === 0);
+  let data = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId) && String(p.enableDisplay) !== '1');
   if (guide) data = data.filter(p => p.guideTitle === guide);
 
   const rowsHtml = data.length === 0
@@ -1135,7 +1141,7 @@ function runRgHiddenReport() {
   const guide = el('r-rgh-guide')?.value || '';
   state.reportFilters['rg-hidden'].guide = guide;
 
-  let data = state.pages.filter(p => CONFIG.RESEARCH_GUIDE_GROUPS.includes(p.groupId) && p.enableDisplay === 0);
+  let data = state.pages.filter(p => CONFIG.RESEARCH_GUIDE_GROUPS.includes(p.groupId) && String(p.enableDisplay) !== '1');
   if (guide) data = data.filter(p => p.guideTitle === guide);
 
   const rowsHtml = data.length === 0
