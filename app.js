@@ -6,12 +6,15 @@ const state = {
   names: [],          // sorted staff names (from /accounts, or derived from guide data)
   guideOptions: [],   // sorted unique guide titles
   selectedName: '',   // shared across Website Pages + Research Guides
-  stewardship: {},    // page_id → { steward, deputy } from stewardship.json
-  stewardshipDirty: false,
+  stewardship: {},    // page_id → { expert, editor } from KV
   audit: {},          // 'page:{id}' | 'guide:{id}' → { links, accessibility, accuracy }
   manageFilters: { guide: '', showAssigned: true, showUnassigned: true },
+  wpSort:  { col: 'guide', dir: 'asc' },
+  rgSort:  { col: 'guide', dir: 'asc' },
+  msSort:  { col: 'guide', dir: 'asc' },
+  // sort col names: 'expert' (was 'steward'), 'editor' (was 'deputy')
   reportFilters: {
-    stale:      { steward: '', olderThan: '' },
+    stale:      { expert: '', olderThan: '' },
     unassigned: { guide: '', missing: 'either' },
     missing:    { guide: '' },
     hidden:     { guide: '' },
@@ -21,6 +24,13 @@ const state = {
 };
 
 // ── Helpers ────────────────────────────────────────────────────────
+function sortTh(label, col, sortState) {
+  const active = sortState.col === col;
+  const arrow  = active ? (sortState.dir === 'asc' ? ' ▲' : ' ▼') : ' ▲';
+  const cls    = `sort-th${active ? ' sort-th-active' : ''}`;
+  return `<th class="${cls}" data-sort="${col}">${label}<span class="sort-indicator${active ? ' sort-active' : ''}">${arrow}</span></th>`;
+}
+
 function esc(v) {
   return String(v ?? '')
     .replace(/&/g,'&amp;')
@@ -90,9 +100,9 @@ function freshnessBadge(status) {
 }
 
 function roleBadge(role) {
-  if (role === 'both')    return '<span class="badge badge-info">Both</span>';
-  if (role === 'steward') return '<span class="badge badge-info">Steward</span>';
-  if (role === 'deputy')  return '<span class="badge badge-info">Deputy</span>';
+  if (role === 'both')   return '<span class="badge badge-info">Both</span>';
+  if (role === 'expert') return '<span class="badge badge-info">Content Expert</span>';
+  if (role === 'editor') return '<span class="badge badge-info">Web Editor</span>';
   return '';
 }
 
@@ -200,11 +210,11 @@ async function saveAuditCheck(key, field, checked) {
   });
 }
 
-function stewardCell(name) {
+function expertCell(name) {
   return name ? esc(name) : '<span class="muted-italic">Unassigned</span>';
 }
 
-function deputyCell(name) {
+function editorCell(name) {
   return name ? esc(name) : '<span class="muted-italic">—</span>';
 }
 
@@ -216,12 +226,12 @@ function parseStewardshipBox(html) {
   const alert = div.querySelector('.alert.alert-info');
   if (!alert) return null;
   const inner = alert.innerHTML;
-  const stewardM    = inner.match(/Page Steward:<\/strong>\s*([^<\n]*)/i);
-  const deputyM     = inner.match(/Page Deputy:<\/strong>\s*([^<\n]*)/i);
-  const updatedByM  = inner.match(/Last Updated by:<\/strong>\s*([^<\n]*)/i);
+  const expertM    = inner.match(/Page Steward:<\/strong>\s*([^<\n]*)/i);
+  const editorM    = inner.match(/Page Deputy:<\/strong>\s*([^<\n]*)/i);
+  const updatedByM = inner.match(/Last Updated by:<\/strong>\s*([^<\n]*)/i);
   return {
-    steward:       stewardM   ? stewardM[1].trim()   : null,
-    deputy:        deputyM    ? deputyM[1].trim()    : null,
+    expert:        expertM    ? expertM[1].trim()    : null,
+    editor:        editorM    ? editorM[1].trim()    : null,
     lastUpdatedBy: updatedByM ? updatedByM[1].trim() : null,
   };
 }
@@ -251,25 +261,25 @@ function processGuides(guides) {
     for (const page of guide.pages) {
       // stewardship.json is the primary source; box HTML parsing is the fallback
       const jsonEntry = state.stewardship[String(page.id)];
-      let rawSteward, rawDeputy, lastUpdatedBy, hasStewardshipBox;
+      let rawExpert, rawEditor, lastUpdatedBy, hasStewardshipBox;
 
       if (jsonEntry) {
-        rawSteward        = jsonEntry.steward || null;
-        rawDeputy         = jsonEntry.deputy  || null;
+        rawExpert         = jsonEntry.expert || null;
+        rawEditor         = jsonEntry.editor || null;
         hasStewardshipBox = true;
       } else {
         const sh          = findStewardship(page.boxes);
-        rawSteward        = sh?.steward       ?? null;
-        rawDeputy         = sh?.deputy        ?? null;
+        rawExpert         = sh?.expert        ?? null;
+        rawEditor         = sh?.editor        ?? null;
         lastUpdatedBy     = sh?.lastUpdatedBy ?? null;
         hasStewardshipBox = sh !== null;
       }
 
-      const steward = isUnassigned(rawSteward) ? null : rawSteward;
-      const deputy  = isUnassigned(rawDeputy)  ? null : rawDeputy;
+      const expert = isUnassigned(rawExpert) ? null : rawExpert;
+      const editor = isUnassigned(rawEditor) ? null : rawEditor;
 
-      if (steward)   nameSet.add(steward);
-      if (deputy)    nameSet.add(deputy);
+      if (expert)    nameSet.add(expert);
+      if (editor)    nameSet.add(editor);
       if (ownerName) nameSet.add(ownerName);
       guideSet.add(guideTitle);
 
@@ -286,8 +296,8 @@ function processGuides(guides) {
         updated:           page.updated || null,
         guideUpdated:      guide.updated || null,
         enableDisplay:     page.enable_display ?? 1,
-        steward,
-        deputy,
+        expert,
+        editor,
         lastUpdatedBy,
         hasStewardshipBox,
         freshness:         freshnessStatus(page.updated),
@@ -304,12 +314,31 @@ function processGuides(guides) {
 
 // ── Data fetching ──────────────────────────────────────────────────
 async function loadData(force = false) {
-  // Always fetch stewardship.json fresh (it may have been updated)
+  // Load stewardship from KV; if empty, seed from stewardship.json (one-time migration)
   try {
-    const sr = await fetch('stewardship.json?_=' + Date.now());
-    if (sr.ok) state.stewardship = await sr.json();
-  } catch { /* file missing or invalid — start empty */ }
-  state.stewardshipDirty = false;
+    const sr = await fetch(`${CONFIG.WORKER_URL}/stewardship`);
+    if (sr.ok) {
+      const kvData = await sr.json();
+      if (Object.keys(kvData).length > 0) {
+        state.stewardship = kvData;
+      } else {
+        // KV is empty — seed from stewardship.json
+        const jr = await fetch('stewardship.json?_=' + Date.now());
+        if (jr.ok) {
+          const jsonData = await jr.json();
+          state.stewardship = jsonData;
+          // Write each entry to KV so future loads come from there
+          await Promise.all(Object.entries(jsonData).map(([pageId, entry]) =>
+            fetch(`${CONFIG.WORKER_URL}/stewardship`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pageId, expert: entry.expert || '', editor: entry.editor || '' }),
+            })
+          ));
+        }
+      }
+    }
+  } catch { /* KV unavailable — stewardship stays empty */ }
 
   // Fetch staff accounts for name lists (emails are stripped by the worker)
   try {
@@ -430,22 +459,22 @@ function renderMyWebsitePages() {
   const name = state.selectedName;
   const container = el('view-my-website-pages');
   const pool = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId));
-  const pages = name ? pool.filter(p => p.steward === name || p.deputy === name) : pool;
+  const pages = name ? pool.filter(p => p.expert === name || p.editor === name) : pool;
   const needsUpdate = pages.filter(p => p.freshness !== 'current').length;
 
   let metricsHtml;
   if (name) {
-    const stewarded = pages.filter(p => p.steward === name).length;
-    const deputyOn  = pages.filter(p => p.deputy  === name).length;
-    const missDep   = pages.filter(p => p.steward === name && !p.deputy).length;
+    const asExpert  = pages.filter(p => p.expert === name).length;
+    const asEditor  = pages.filter(p => p.editor === name).length;
+    const missEdit  = pages.filter(p => p.expert === name && !p.editor).length;
     metricsHtml = `
-      <div class="metric"><div class="metric-label">Pages stewarded</div><div class="metric-value">${stewarded}</div></div>
-      <div class="metric"><div class="metric-label">Deputy on</div><div class="metric-value">${deputyOn}</div></div>
+      <div class="metric"><div class="metric-label">Content Expert on</div><div class="metric-value">${asExpert}</div></div>
+      <div class="metric"><div class="metric-label">Web Editor on</div><div class="metric-value">${asEditor}</div></div>
       <div class="metric"><div class="metric-label">Needs update</div><div class="metric-value${needsUpdate > 0 ? ' danger' : ''}">${needsUpdate}</div></div>
-      <div class="metric"><div class="metric-label">Missing deputy</div><div class="metric-value${missDep > 0 ? ' danger' : ''}">${missDep}</div></div>`;
+      <div class="metric"><div class="metric-label">Missing web editor</div><div class="metric-value${missEdit > 0 ? ' danger' : ''}">${missEdit}</div></div>`;
   } else {
-    const assigned   = pool.filter(p => p.steward || p.deputy).length;
-    const unassigned = pool.filter(p => !p.steward && !p.deputy).length;
+    const assigned   = pool.filter(p => p.expert || p.editor).length;
+    const unassigned = pool.filter(p => !p.expert && !p.editor).length;
     metricsHtml = `
       <div class="metric"><div class="metric-label">Total pages</div><div class="metric-value">${pool.length}</div></div>
       <div class="metric"><div class="metric-label">Assigned</div><div class="metric-value">${assigned}</div></div>
@@ -453,15 +482,26 @@ function renderMyWebsitePages() {
       <div class="metric"><div class="metric-label">Needs update</div><div class="metric-value${needsUpdate > 0 ? ' danger' : ''}">${needsUpdate}</div></div>`;
   }
 
-  const rowsHtml = pages.length === 0
+  const wpSort = state.wpSort;
+  const sorted = [...pages].sort((a, b) => {
+    let va, vb;
+    if      (wpSort.col === 'guide')   { va = a.guideTitle || ''; vb = b.guideTitle || ''; }
+    else if (wpSort.col === 'page')    { va = a.pageLabel  || ''; vb = b.pageLabel  || ''; }
+    else if (wpSort.col === 'expert')  { va = a.expert     || ''; vb = b.expert     || ''; }
+    else if (wpSort.col === 'updated') { va = a.updated    || ''; vb = b.updated    || ''; }
+    const cmp = String(va).localeCompare(String(vb));
+    return wpSort.dir === 'asc' ? cmp : -cmp;
+  });
+
+  const rowsHtml = sorted.length === 0
     ? `<tr><td colspan="7"><div class="empty-state">No pages found.</div></td></tr>`
-    : pages.map(p => {
+    : sorted.map(p => {
         const dateClass = p.freshness === 'very-stale' ? 'date-very-stale'
                         : p.freshness === 'stale'      ? 'date-stale' : '';
         const col3 = name
-          ? (() => { const isSteward = p.steward === name; const isDeputy = p.deputy === name;
-              return roleBadge((isSteward && isDeputy) ? 'both' : isSteward ? 'steward' : 'deputy'); })()
-          : `<span class="${p.steward ? '' : 'muted-italic'}">${esc(p.steward || 'Unassigned')}</span>`;
+          ? (() => { const isExpert = p.expert === name; const isEditor = p.editor === name;
+              return roleBadge((isExpert && isEditor) ? 'both' : isExpert ? 'expert' : 'editor'); })()
+          : `<span class="${p.expert ? '' : 'muted-italic'}">${esc(p.expert || 'Unassigned')}</span>`;
         return `<tr>
           <td>${pageLink(p)}</td>
           <td class="col-guide">${esc(p.guideTitle)}</td>
@@ -471,7 +511,7 @@ function renderMyWebsitePages() {
         </tr>`;
       }).join('');
 
-  const col3Header = name ? 'Role' : 'Steward';
+  const col3Header = name ? 'Role' : 'Content Expert';
 
   container.innerHTML = `
     <div class="topbar"><h1>Website Pages</h1><button class="btn-primary" id="wp-audit-save">Save Audit</button></div>
@@ -493,8 +533,13 @@ function renderMyWebsitePages() {
             <col style="width:7%"><col style="width:7%"><col style="width:7%">
           </colgroup>
           <thead>
-            <tr><th>Page</th><th>Guide</th><th>${col3Header}</th><th>Last updated</th>
-            <th class="col-audit-check">Links</th><th class="col-audit-check">A11y</th><th class="col-audit-check">Accuracy</th></tr>
+            <tr>
+              ${sortTh('Page', 'page', wpSort)}
+              ${sortTh('Guide', 'guide', wpSort)}
+              ${name ? `<th>${col3Header}</th>` : sortTh('Content Expert', 'expert', wpSort)}
+              ${sortTh('Last updated', 'updated', wpSort)}
+              <th class="col-audit-check">Links</th><th class="col-audit-check">A11y</th><th class="col-audit-check">Accuracy</th>
+            </tr>
           </thead>
           <tbody id="wp-audit-tbody">${rowsHtml}</tbody>
           ${auditTfoot('wp-audit-tbody', 4)}
@@ -504,6 +549,15 @@ function renderMyWebsitePages() {
 
   el('wp-name')?.addEventListener('change', e => { state.selectedName = e.target.value; renderCurrentView(); });
   el('wp-reset')?.addEventListener('click', e => { e.preventDefault(); state.selectedName = ''; renderCurrentView(); });
+  container.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sort;
+      state.wpSort = state.wpSort.col === col
+        ? { col, dir: state.wpSort.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'asc' };
+      renderCurrentView();
+    });
+  });
   el('wp-audit-tbody')?.addEventListener('change', e => {
     const cb = e.target.closest('.audit-cb');
     if (!cb) return;
@@ -533,10 +587,19 @@ function renderMyResearchGuides() {
     allGuideMap.get(p.guideId).pages.push(p);
   }
 
+  const rgSort = state.rgSort;
   const allGuides = Array.from(allGuideMap.values()).map(g => {
     const visiblePages = g.pages.filter(p => String(p.enableDisplay) === '1');
     return { ...g, pageCount: visiblePages.length, freshness: freshnessStatus(g.guideUpdated) };
-  }).sort((a,b) => a.guideTitle.localeCompare(b.guideTitle));
+  }).sort((a, b) => {
+    let va, vb;
+    if      (rgSort.col === 'guide')   { va = a.guideTitle  || ''; vb = b.guideTitle  || ''; }
+    else if (rgSort.col === 'owner')   { va = a.guideOwner  || ''; vb = b.guideOwner  || ''; }
+    else if (rgSort.col === 'pages')   { va = a.pageCount;          vb = b.pageCount; return rgSort.dir === 'asc' ? va - vb : vb - va; }
+    else if (rgSort.col === 'updated') { va = a.guideUpdated || ''; vb = b.guideUpdated || ''; }
+    const cmp = String(va).localeCompare(String(vb));
+    return rgSort.dir === 'asc' ? cmp : -cmp;
+  });
 
   const ownerNames = [...new Set(allGuides.map(g => g.guideOwner).filter(Boolean))].sort((a,b) => a.localeCompare(b));
   const ownerOpts = ownerNames.map(n =>
@@ -590,8 +653,13 @@ function renderMyResearchGuides() {
             <col style="width:7%"><col style="width:7%"><col style="width:7%">
           </colgroup>
           <thead>
-            <tr><th>Guide</th><th>Owner</th><th class="col-count">Pages</th><th>Last updated</th>
-            <th class="col-audit-check">Links</th><th class="col-audit-check">A11y</th><th class="col-audit-check">Accuracy</th></tr>
+            <tr>
+              ${sortTh('Guide', 'guide', rgSort)}
+              ${sortTh('Owner', 'owner', rgSort)}
+              <th class="col-count sort-th${rgSort.col === 'pages' ? ' sort-th-active' : ''}" data-sort="pages">Pages<span class="sort-indicator${rgSort.col === 'pages' ? ' sort-active' : ''}">${rgSort.col === 'pages' ? (rgSort.dir === 'asc' ? ' ▲' : ' ▼') : ' ▲'}</span></th>
+              ${sortTh('Last updated', 'updated', rgSort)}
+              <th class="col-audit-check">Links</th><th class="col-audit-check">A11y</th><th class="col-audit-check">Accuracy</th>
+            </tr>
           </thead>
           <tbody id="rg-audit-tbody">${rowsHtml}</tbody>
           ${auditTfoot('rg-audit-tbody', 4)}
@@ -616,13 +684,22 @@ function renderMyResearchGuides() {
 
   el('rg-name')?.addEventListener('change', e => { state.selectedName = e.target.value; renderCurrentView(); });
   el('rg-reset')?.addEventListener('click', e => { e.preventDefault(); state.selectedName = ''; renderCurrentView(); });
+  container.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sort;
+      state.rgSort = state.rgSort.col === col
+        ? { col, dir: state.rgSort.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'asc' };
+      renderCurrentView();
+    });
+  });
 }
 
 
 // ── View: Reports ──────────────────────────────────────────────────
 const WEBSITE_REPORTS = [
   { id:'stale',      icon:'🕐', title:'Stale content',              desc:'Pages not updated since a specified date. Good for identifying maintenance priorities.' },
-  { id:'unassigned', icon:'👤', title:'Unassigned pages',            desc:'Pages missing a steward, deputy, or both. Run before committee check-ins.' },
+  { id:'unassigned', icon:'👤', title:'Unassigned pages',            desc:'Pages missing a content expert, web editor, or both. Run before committee check-ins.' },
   { id:'missing',    icon:'⚠️', title:'Missing stewardship record',  desc:'Pages with no stewardship record at all. Requires manual remediation.' },
   { id:'hidden',     icon:'🙈', title:'Hidden pages',                desc:'Pages with display disabled. May be drafts or retired content worth reviewing.' },
 ];
@@ -686,8 +763,8 @@ function renderStalePanel(panel) {
         <label class="filter-label">Not updated since</label>
         <input type="date" id="r-stale-before" value="${f.olderThan}">
         <select id="r-stale-steward">
-          <option value="">All stewards</option>
-          ${nameOptions(f.steward)}
+          <option value="">All content experts</option>
+          ${nameOptions(f.expert)}
         </select>
         <button class="btn-run" id="r-stale-run">Run report</button>
       </div>
@@ -695,11 +772,11 @@ function renderStalePanel(panel) {
     </div>`;
 
   el('r-stale-before')?.addEventListener('change',  e => { state.reportFilters.stale.olderThan = e.target.value; });
-  el('r-stale-steward')?.addEventListener('change', e => { state.reportFilters.stale.steward   = e.target.value; });
+  el('r-stale-steward')?.addEventListener('change', e => { state.reportFilters.stale.expert = e.target.value; });
   el('r-stale-run')?.addEventListener('click', () => runStaleReport());
 
   // Auto-run if filters already set
-  if (f.olderThan || f.steward) runStaleReport();
+  if (f.olderThan || f.expert) runStaleReport();
   else el('r-stale-results').innerHTML = emptyPromptHtml();
 }
 
@@ -707,12 +784,12 @@ function runStaleReport() {
   const f = state.reportFilters.stale;
   // Read current input values (user may not have fired change event)
   const before = el('r-stale-before')?.value  || f.olderThan;
-  const steward = el('r-stale-steward')?.value || f.steward;
+  const expert  = el('r-stale-steward')?.value || f.expert;
   state.reportFilters.stale.olderThan = before;
-  state.reportFilters.stale.steward   = steward;
+  state.reportFilters.stale.expert    = expert;
 
   let data = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId) && (p.freshness === 'stale' || p.freshness === 'very-stale'));
-  if (steward) data = data.filter(p => p.steward === steward || p.deputy === steward);
+  if (expert) data = data.filter(p => p.expert === expert || p.editor === expert);
   if (before) {
     const cutoff = new Date(before).getTime();
     data = data.filter(p => { const d = parseDate(p.updated); return d && d.getTime() < cutoff; });
@@ -726,12 +803,12 @@ function runStaleReport() {
        </div>
        <div class="table-wrap"><table>
          <colgroup><col style="width:26%"><col style="width:22%"><col style="width:16%"><col style="width:16%"><col style="width:12%"><col style="width:8%"></colgroup>
-         <thead><tr><th>Page</th><th>Guide</th><th>Steward</th><th>Deputy</th><th>Last updated</th><th>Status</th></tr></thead>
+         <thead><tr><th>Page</th><th>Guide</th><th>Content Expert</th><th>Web Editor</th><th>Last updated</th><th>Status</th></tr></thead>
          <tbody>${data.map(p=>`<tr>
            <td>${pageLink(p)}</td>
            <td class="col-guide">${esc(p.guideTitle)}</td>
-           <td>${stewardCell(p.steward)}</td>
-           <td>${deputyCell(p.deputy)}</td>
+           <td>${expertCell(p.expert)}</td>
+           <td>${editorCell(p.editor)}</td>
            ${dateTd(p.updated)}
            <td>${freshnessBadge(p.freshness)}</td>
          </tr>`).join('')}</tbody>
@@ -739,10 +816,10 @@ function runStaleReport() {
 
   el('r-stale-results').innerHTML = rowsHtml;
   el('r-stale-export')?.addEventListener('click', () => exportCSV('stale-content.csv', data, [
-    { label:'Page',         get: p => p.pageLabel },
-    { label:'Guide',        get: p => p.guideTitle },
-    { label:'Steward',      get: p => p.steward ?? '' },
-    { label:'Deputy',       get: p => p.deputy  ?? '' },
+    { label:'Page',           get: p => p.pageLabel },
+    { label:'Guide',          get: p => p.guideTitle },
+    { label:'Content Expert', get: p => p.expert ?? '' },
+    { label:'Web Editor',     get: p => p.editor ?? '' },
     { label:'Last updated', get: p => formatDate(p.updated) },
     { label:'Days ago',     get: p => daysAgo(p.updated) },
     { label:'Status',       get: p => p.freshness },
@@ -764,9 +841,9 @@ function renderUnassignedPanel(panel) {
         </select>
         <label class="filter-label">Missing</label>
         <select id="r-un-missing">
-          <option value="either"  ${f.missing==='either'  ?'selected':''}>Steward or deputy</option>
-          <option value="steward" ${f.missing==='steward' ?'selected':''}>Steward only</option>
-          <option value="deputy"  ${f.missing==='deputy'  ?'selected':''}>Deputy only</option>
+          <option value="either"  ${f.missing==='either'  ?'selected':''}>Content Expert or Web Editor</option>
+          <option value="expert"  ${f.missing==='expert'  ?'selected':''}>Content Expert only</option>
+          <option value="editor"  ${f.missing==='editor'  ?'selected':''}>Web Editor only</option>
         </select>
         <button class="btn-run" id="r-un-run">Run report</button>
       </div>
@@ -785,10 +862,10 @@ function runUnassignedReport() {
   state.reportFilters.unassigned.guide   = guide;
   state.reportFilters.unassigned.missing = missing;
 
-  let data = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId) && p.hasStewardshipBox && (!p.steward || !p.deputy));
-  if (guide)            data = data.filter(p => p.guideTitle === guide);
-  if (missing==='steward') data = data.filter(p => !p.steward);
-  if (missing==='deputy')  data = data.filter(p => !p.deputy);
+  let data = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId) && p.hasStewardshipBox && (!p.expert || !p.editor));
+  if (guide)           data = data.filter(p => p.guideTitle === guide);
+  if (missing==='expert') data = data.filter(p => !p.expert);
+  if (missing==='editor') data = data.filter(p => !p.editor);
 
   const rowsHtml = data.length === 0
     ? `<div class="empty-state">No results.</div>`
@@ -798,14 +875,14 @@ function runUnassignedReport() {
        </div>
        <div class="table-wrap"><table>
          <colgroup><col style="width:28%"><col style="width:24%"><col style="width:18%"><col style="width:18%"><col style="width:12%"></colgroup>
-         <thead><tr><th>Page</th><th>Guide</th><th>Steward</th><th>Deputy</th><th>Missing</th></tr></thead>
+         <thead><tr><th>Page</th><th>Guide</th><th>Content Expert</th><th>Web Editor</th><th>Missing</th></tr></thead>
          <tbody>${data.map(p=>{
-           const miss = [!p.steward&&'Steward', !p.deputy&&'Deputy'].filter(Boolean).join(', ');
+           const miss = [!p.expert&&'Content Expert', !p.editor&&'Web Editor'].filter(Boolean).join(', ');
            return `<tr>
              <td>${pageLink(p)}</td>
              <td class="col-guide">${esc(p.guideTitle)}</td>
-             <td>${stewardCell(p.steward)}</td>
-             <td>${deputyCell(p.deputy)}</td>
+             <td>${expertCell(p.expert)}</td>
+             <td>${editorCell(p.editor)}</td>
              <td>${esc(miss)}</td>
            </tr>`;
          }).join('')}</tbody>
@@ -813,12 +890,12 @@ function runUnassignedReport() {
 
   el('r-un-results').innerHTML = rowsHtml;
   el('r-un-export')?.addEventListener('click', () => exportCSV('unassigned-pages.csv', data, [
-    { label:'Page',    get: p => p.pageLabel },
-    { label:'Guide',   get: p => p.guideTitle },
-    { label:'Steward', get: p => p.steward ?? '' },
-    { label:'Deputy',  get: p => p.deputy  ?? '' },
-    { label:'Missing', get: p => [!p.steward&&'Steward', !p.deputy&&'Deputy'].filter(Boolean).join(', ') },
-    { label:'URL',     get: p => p.pageFriendlyUrl ?? '' },
+    { label:'Page',           get: p => p.pageLabel },
+    { label:'Guide',          get: p => p.guideTitle },
+    { label:'Content Expert', get: p => p.expert ?? '' },
+    { label:'Web Editor',     get: p => p.editor ?? '' },
+    { label:'Missing',        get: p => [!p.expert&&'Content Expert', !p.editor&&'Web Editor'].filter(Boolean).join(', ') },
+    { label:'URL',            get: p => p.pageFriendlyUrl ?? '' },
   ]));
 }
 
@@ -915,20 +992,20 @@ function runHiddenReport() {
        </div>
        <div class="table-wrap"><table>
          <colgroup><col style="width:30%"><col style="width:26%"><col style="width:22%"><col style="width:22%"></colgroup>
-         <thead><tr><th>Page</th><th>Guide</th><th>Steward</th><th>Last updated</th></tr></thead>
+         <thead><tr><th>Page</th><th>Guide</th><th>Content Expert</th><th>Last updated</th></tr></thead>
          <tbody>${data.map(p=>`<tr>
            <td>${pageLink(p)}</td>
            <td class="col-guide">${esc(p.guideTitle)}</td>
-           <td>${stewardCell(p.steward)}</td>
+           <td>${expertCell(p.expert)}</td>
            ${dateTd(p.updated)}
          </tr>`).join('')}</tbody>
        </table></div>`;
 
   el('r-hp-results').innerHTML = rowsHtml;
   el('r-hp-export')?.addEventListener('click', () => exportCSV('hidden-pages.csv', data, [
-    { label:'Page',         get: p => p.pageLabel },
-    { label:'Guide',        get: p => p.guideTitle },
-    { label:'Steward',      get: p => p.steward ?? '' },
+    { label:'Page',           get: p => p.pageLabel },
+    { label:'Guide',          get: p => p.guideTitle },
+    { label:'Content Expert', get: p => p.expert ?? '' },
     { label:'Last updated', get: p => formatDate(p.updated) },
     { label:'URL',          get: p => p.pageFriendlyUrl ?? '' },
   ]));
@@ -1092,21 +1169,25 @@ function emptyPromptHtml() {
   return `<div class="empty-state">Select a report above and run it to see results.</div>`;
 }
 
-// ── View: Manage Stewards ──────────────────────────────────────────
+// ── View: Assign Roles ──────────────────────────────────────────
 function renderManageStewards() {
   const f = state.manageFilters;
   const container = el('view-manage-stewards');
 
   let filtered = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId));
   if (f.guide) filtered = filtered.filter(p => p.guideTitle === f.guide);
-  if (!f.showAssigned)   filtered = filtered.filter(p => !p.steward && !p.deputy);
-  if (!f.showUnassigned) filtered = filtered.filter(p => p.steward || p.deputy);
-  filtered = [...filtered].sort((a,b) => a.guideTitle.localeCompare(b.guideTitle));
-
-  const dirtyBanner = state.stewardshipDirty ? `
-    <div class="dirty-banner">
-      ● Unsaved changes — download the JSON and commit it to your repository.
-    </div>` : '';
+  if (!f.showAssigned)   filtered = filtered.filter(p => !p.expert && !p.editor);
+  if (!f.showUnassigned) filtered = filtered.filter(p => p.expert || p.editor);
+  const msSort = state.msSort;
+  filtered = [...filtered].sort((a, b) => {
+    let va, vb;
+    if      (msSort.col === 'guide')   { va = a.guideTitle || ''; vb = b.guideTitle || ''; }
+    else if (msSort.col === 'page')    { va = a.pageLabel  || ''; vb = b.pageLabel  || ''; }
+    else if (msSort.col === 'expert')  { va = a.expert     || ''; vb = b.expert     || ''; }
+    else if (msSort.col === 'editor')  { va = a.editor     || ''; vb = b.editor     || ''; }
+    const cmp = String(va).localeCompare(String(vb));
+    return msSort.dir === 'asc' ? cmp : -cmp;
+  });
 
   const nameListId = 'steward-names-list';
   const nameListHtml = `
@@ -1130,25 +1211,23 @@ function renderManageStewards() {
           <td class="col-guide">${esc(p.guideTitle)}</td>
           <td>
             <input class="steward-input" type="text" list="${nameListId}"
-              data-field="steward" data-page-id="${p.pageId}"
-              aria-label="Steward for ${esc(p.pageLabel)}"
-              value="${esc(p.steward || '')}" placeholder="unassigned">
+              data-field="expert" data-page-id="${p.pageId}"
+              aria-label="Content Expert for ${esc(p.pageLabel)}"
+              value="${esc(p.expert || '')}" placeholder="unassigned">
           </td>
           <td>
             <input class="steward-input" type="text" list="${nameListId}"
-              data-field="deputy" data-page-id="${p.pageId}"
-              aria-label="Deputy for ${esc(p.pageLabel)}"
-              value="${esc(p.deputy || '')}" placeholder="unassigned">
+              data-field="editor" data-page-id="${p.pageId}"
+              aria-label="Web Editor for ${esc(p.pageLabel)}"
+              value="${esc(p.editor || '')}" placeholder="unassigned">
           </td>
         </tr>`).join('');
 
   container.innerHTML = `
     ${nameListHtml}
     <div class="topbar">
-      <h1>Manage Stewards</h1>
-      <button class="btn-primary" id="ms-save">Save to GitHub</button>
+      <h1>Assign Roles</h1>
     </div>
-    ${dirtyBanner}
     <div class="content">
       <div class="filter-row">
         <label class="filter-label" for="ms-guide">Filter by Guide:</label>
@@ -1170,7 +1249,12 @@ function renderManageStewards() {
             <col style="width:21%"><col style="width:21%">
           </colgroup>
           <thead>
-            <tr><th>Page</th><th>Guide</th><th>Steward</th><th>Deputy</th></tr>
+            <tr>
+              ${sortTh('Page', 'page', msSort)}
+              ${sortTh('Guide', 'guide', msSort)}
+              ${sortTh('Content Expert', 'expert', msSort)}
+              ${sortTh('Web Editor', 'editor', msSort)}
+            </tr>
           </thead>
           <tbody id="ms-tbody">${rowsHtml}</tbody>
         </table>
@@ -1180,8 +1264,17 @@ function renderManageStewards() {
   el('ms-guide')?.addEventListener('change', e => { state.manageFilters.guide = e.target.value; renderManageStewards(); });
   el('ms-show-assigned')?.addEventListener('change', e => { state.manageFilters.showAssigned = e.target.checked; renderManageStewards(); });
   el('ms-show-unassigned')?.addEventListener('change', e => { state.manageFilters.showUnassigned = e.target.checked; renderManageStewards(); });
+  container.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sort;
+      state.msSort = state.msSort.col === col
+        ? { col, dir: state.msSort.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'asc' };
+      renderManageStewards();
+    });
+  });
 
-  // Inline edit — event delegation on tbody
+  // Inline edit — save to KV on change
   el('ms-tbody')?.addEventListener('change', e => {
     const input = e.target.closest('.steward-input');
     if (!input) return;
@@ -1189,73 +1282,25 @@ function renderManageStewards() {
     const field  = input.dataset.field;
     const value  = input.value.trim();
 
-    if (!state.stewardship[pageId]) state.stewardship[pageId] = { steward: '', deputy: '' };
+    if (!state.stewardship[pageId]) state.stewardship[pageId] = { expert: '', editor: '' };
     state.stewardship[pageId][field] = value;
-    state.stewardshipDirty = true;
 
     // Keep page record in sync so other views reflect the change immediately
     const page = state.pages.find(p => String(p.pageId) === String(pageId));
     if (page) {
-      if (field === 'steward') page.steward = isUnassigned(value) ? null : value;
-      if (field === 'deputy')  page.deputy  = isUnassigned(value) ? null : value;
+      if (field === 'expert') page.expert = isUnassigned(value) ? null : value;
+      if (field === 'editor') page.editor = isUnassigned(value) ? null : value;
     }
 
-    // Show dirty banner without full re-render
-    const existing = container.querySelector('.dirty-banner');
-    if (!existing) {
-      container.querySelector('.topbar').insertAdjacentHTML('afterend', `
-        <div class="dirty-banner">● Unsaved changes — download the JSON and commit it to your repository.</div>`);
-    }
-  });
-
-  // Save to GitHub
-  el('ms-save')?.addEventListener('click', () => saveStewardshipToGitHub(container));
-}
-
-// ── Save stewardship.json to GitHub ───────────────────────────────
-async function saveStewardshipToGitHub(container) {
-  const btn = el('ms-save');
-  btn.disabled = true;
-  btn.textContent = 'Saving…';
-
-  const output = {};
-  for (const [id, data] of Object.entries(state.stewardship)) {
-    if (data.steward || data.deputy) {
-      output[id] = { steward: data.steward || '', deputy: data.deputy || '' };
-    }
-  }
-
-  try {
-    const res = await fetch(`${CONFIG.WORKER_URL}/stewardship`, {
-      method: 'POST',
+    const entry = state.stewardship[pageId];
+    fetch(`${CONFIG.WORKER_URL}/stewardship`, {
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(output),
+      body: JSON.stringify({ pageId, expert: entry.expert || '', editor: entry.editor || '' }),
     });
-
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
-
-    state.stewardshipDirty = false;
-    container.querySelector('.dirty-banner')?.remove();
-    btn.textContent = '✓ Saved';
-    btn.style.background = 'var(--ok-text)';
-    setTimeout(() => {
-      btn.textContent = 'Save to GitHub';
-      btn.style.background = '';
-      btn.disabled = false;
-    }, 3000);
-  } catch (err) {
-    btn.textContent = 'Save to GitHub';
-    btn.disabled = false;
-    const existing = container.querySelector('.save-error');
-    if (existing) existing.remove();
-    container.querySelector('.topbar').insertAdjacentHTML('afterend',
-      `<div class="dirty-banner save-error" style="background:var(--danger-bg);color:var(--danger-text);border-color:#f5c6c6">
-        ✕ Save failed: ${esc(err.message)}
-      </div>`
-    );
-  }
+  });
 }
+
 
 // ── CSV export ─────────────────────────────────────────────────────
 function exportCSV(filename, rows, columns) {

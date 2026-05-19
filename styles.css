@@ -363,6 +363,11 @@ th {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.sort-th { cursor: pointer; user-select: none; }
+.sort-th:hover { color: var(--accent); }
+.sort-th-active { color: var(--text); }
+.sort-indicator { font-size: 9px; margin-left: 2px; opacity: 0.25; }
+.sort-indicator.sort-active { opacity: 0.8; }
 
 td {
   padding: 8px 12px;
@@ -563,7 +568,7 @@ td.date-very-stale { color: var(--date-vstale); }
   flex: 1;
 }
 
-/* ── Manage Stewards ─────────────────────────────────────────────── */
+/* ── Assign Roles──────────────────────────────────────── */
 .dirty-banner {
   background: var(--warn-bg);
   color: var(--warn-text);

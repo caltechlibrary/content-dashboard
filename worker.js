@@ -53,58 +53,33 @@ function jsonResponse(data, status = 200) {
   });
 }
 
-// ── GitHub: commit stewardship.json ────────────────────────────────
-async function saveStewardship(request, env) {
+// ── Stewardship KV helpers ─────────────────────────────────────────
+
+// GET /stewardship → { pageId: { expert, editor }, ... }
+async function getStewardship(env) {
+  const { keys } = await env.AUDIT.list({ prefix: 'steward:' });
+  const entries = await Promise.all(
+    keys.map(async ({ name }) => {
+      const val = await env.AUDIT.get(name);
+      return { pageId: name.slice('steward:'.length), value: val ? JSON.parse(val) : null };
+    })
+  );
+  const result = {};
+  for (const { pageId, value } of entries) {
+    if (value) result[pageId] = value;
+  }
+  return jsonResponse(result);
+}
+
+// PUT /stewardship  { pageId, expert, editor }
+async function saveStewardshipEntry(request, env) {
   let body;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonResponse({ error: 'Invalid JSON body' }, 400);
+  try { body = await request.json(); } catch {
+    return jsonResponse({ error: 'Invalid JSON' }, 400);
   }
-
-  const owner = env.GITHUB_OWNER;
-  const repo  = env.GITHUB_REPO;
-  const path  = 'stewardship.json';
-  const ghHeaders = {
-    Authorization:  `token ${env.GITHUB_TOKEN}`,
-    Accept:         'application/vnd.github+json',
-    'User-Agent':   'content-steward-worker',
-    'Content-Type': 'application/json',
-  };
-
-  // Fetch current file to get its SHA (required for updates)
-  let sha;
-  const getRes = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
-    { headers: ghHeaders }
-  );
-  if (getRes.ok) {
-    const meta = await getRes.json();
-    sha = meta.sha;
-  } else if (getRes.status !== 404) {
-    const err = await getRes.text();
-    return jsonResponse({ error: `GitHub read failed: ${err}` }, 502);
-  }
-
-  // Encode content as base64
-  const content = btoa(unescape(encodeURIComponent(JSON.stringify(body, null, 2) + '\n')));
-
-  const putPayload = {
-    message: 'Update stewardship.json via Content Steward dashboard',
-    content,
-    ...(sha ? { sha } : {}),
-  };
-
-  const putRes = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
-    { method: 'PUT', headers: ghHeaders, body: JSON.stringify(putPayload) }
-  );
-
-  if (!putRes.ok) {
-    const err = await putRes.text();
-    return jsonResponse({ error: `GitHub write failed: ${err}` }, 502);
-  }
-
+  const { pageId, expert, editor } = body;
+  if (!pageId) return jsonResponse({ error: 'pageId required' }, 400);
+  await env.AUDIT.put(`steward:${pageId}`, JSON.stringify({ expert: expert || '', editor: editor || '' }));
   return jsonResponse({ ok: true });
 }
 
@@ -164,9 +139,10 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders() });
     }
 
-    // POST /stewardship → commit stewardship.json to GitHub
-    if (request.method === 'POST' && pathname === '/stewardship') {
-      return saveStewardship(request, env);
+    // Stewardship KV endpoints
+    if (pathname === '/stewardship') {
+      if (request.method === 'GET') return getStewardship(env);
+      if (request.method === 'PUT') return saveStewardshipEntry(request, env);
     }
 
     // Audit endpoints
