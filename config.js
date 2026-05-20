@@ -6,6 +6,7 @@ const CONFIG = {
   SESSION_KEY: 'cs_guides_v1',
   WEBSITE_PAGE_GROUPS:   [26856, 27077],
   RESEARCH_GUIDE_GROUPS: [10729],
+  DEPARTMENTS: ['Archives', 'ACS', 'CLOPS', 'DLD', 'LIT', 'RS'],
   GITHUB_OWNER: 'caltechlibrary',
   GITHUB_REPO:  'content-dashboard',
 };

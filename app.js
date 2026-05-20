@@ -1354,8 +1354,8 @@ function renderManageStewards() {
 
   let filtered = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId));
   if (f.guide) filtered = filtered.filter(p => p.guideTitle === f.guide);
-  if (!f.showAssigned)   filtered = filtered.filter(p => !p.expert && !p.editor);
-  if (!f.showUnassigned) filtered = filtered.filter(p => p.expert || p.editor);
+  if (!f.showAssigned)   filtered = filtered.filter(p => !p.expert && !p.editor && !p.department);
+  if (!f.showUnassigned) filtered = filtered.filter(p => p.expert || p.editor || p.department);
   const msSort = state.msSort;
   filtered = [...filtered].sort((a, b) => {
     let va, vb;
@@ -1401,10 +1401,11 @@ function renderManageStewards() {
               value="${esc(p.editor || '')}" placeholder="unassigned">
           </td>
           <td>
-            <input class="steward-input" type="text"
-              data-field="department" data-page-id="${p.pageId}"
-              aria-label="Department for ${esc(p.pageLabel)}"
-              value="${esc(p.department || '')}" placeholder="none">
+            <select class="steward-input" data-field="department" data-page-id="${p.pageId}"
+              aria-label="Department for ${esc(p.pageLabel)}">
+              <option value="">— unassigned —</option>
+              ${CONFIG.DEPARTMENTS.map(d => `<option value="${esc(d)}" ${p.department === d ? 'selected' : ''}>${esc(d)}</option>`).join('')}
+            </select>
           </td>
         </tr>`).join('');
 
