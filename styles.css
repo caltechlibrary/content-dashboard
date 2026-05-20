@@ -401,6 +401,27 @@ td.col-guide {
   font-style: italic;
 }
 
+/* Assigned / unassigned chips — match steward-input palette */
+.chip-assigned, .chip-unassigned {
+  display: inline-block;
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font-size: .9rem;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chip-assigned {
+  background: var(--ok-bg);
+  color: var(--ok-text);
+}
+.chip-unassigned {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  font-style: italic;
+}
+
 /* Centered count column */
 th.col-count, td.col-count { text-align: center; }
 

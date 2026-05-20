@@ -71,15 +71,15 @@ async function getStewardship(env) {
   return jsonResponse(result);
 }
 
-// PUT /stewardship  { pageId, expert, editor }
+// PUT /stewardship  { pageId, expert, editor, department }
 async function saveStewardshipEntry(request, env) {
   let body;
   try { body = await request.json(); } catch {
     return jsonResponse({ error: 'Invalid JSON' }, 400);
   }
-  const { pageId, expert, editor } = body;
+  const { pageId, expert, editor, department } = body;
   if (!pageId) return jsonResponse({ error: 'pageId required' }, 400);
-  await env.AUDIT.put(`steward:${pageId}`, JSON.stringify({ expert: expert || '', editor: editor || '' }));
+  await env.AUDIT.put(`steward:${pageId}`, JSON.stringify({ expert: expert || '', editor: editor || '', department: department || '' }));
   return jsonResponse({ ok: true });
 }
 
