@@ -503,8 +503,8 @@ function renderMyWebsitePages() {
         const dateClass = p.freshness === 'very-stale' ? 'date-very-stale'
                         : p.freshness === 'stale'      ? 'date-stale' : '';
         return `<tr>
-          <td>${pageLink(p)}</td>
-          <td class="col-guide">${esc(p.guideTitle)}</td>
+          <td title="${esc(p.pageLabel)}">${pageLink(p)}</td>
+          <td class="col-guide" title="${esc(p.guideTitle)}">${esc(p.guideTitle)}</td>
           <td><span class="${p.expert ? 'chip-assigned' : 'chip-unassigned'}">${esc(p.expert || 'unassigned')}</span></td>
           <td><span class="${p.editor ? 'chip-assigned' : 'chip-unassigned'}">${esc(p.editor || 'unassigned')}</span></td>
           <td><span class="${p.department ? 'chip-assigned' : 'chip-unassigned'}">${esc(p.department || 'unassigned')}</span></td>
@@ -618,8 +618,8 @@ function renderMyResearchGuides() {
     const dateClass = g.freshness === 'very-stale' ? 'date-very-stale'
                     : g.freshness === 'stale'      ? 'date-stale' : '';
     return `<tr>
-      <td>${titleHtml}</td>
-      <td>${esc(g.guideOwner || '—')}</td>
+      <td title="${esc(g.guideTitle)}">${titleHtml}</td>
+      <td title="${esc(g.guideOwner || '')}">${esc(g.guideOwner || '—')}</td>
       <td class="col-count">${g.pageCount}</td>
       <td class="${dateClass}">${esc(formatDate(g.guideUpdated))}</td>
       ${auditCells('guide:' + g.guideId)}
@@ -1386,8 +1386,8 @@ function renderManageStewards() {
     ? `<tr><td colspan="5"><div class="empty-state">No pages match the current filters.</div></td></tr>`
     : filtered.map(p => `
         <tr data-page-id="${p.pageId}">
-          <td>${pageLink(p)}</td>
-          <td class="col-guide">${esc(p.guideTitle)}</td>
+          <td title="${esc(p.pageLabel)}">${pageLink(p)}</td>
+          <td class="col-guide" title="${esc(p.guideTitle)}">${esc(p.guideTitle)}</td>
           <td>
             <input class="steward-input" type="text" list="${nameListId}"
               data-field="expert" data-page-id="${p.pageId}"
@@ -1402,8 +1402,9 @@ function renderManageStewards() {
           </td>
           <td>
             <select class="steward-input" data-field="department" data-page-id="${p.pageId}"
+              data-empty="${!p.department}"
               aria-label="Department for ${esc(p.pageLabel)}">
-              <option value="">— unassigned —</option>
+              <option value="">unassigned</option>
               ${CONFIG.DEPARTMENTS.map(d => `<option value="${esc(d)}" ${p.department === d ? 'selected' : ''}>${esc(d)}</option>`).join('')}
             </select>
           </td>
@@ -1468,6 +1469,7 @@ function renderManageStewards() {
     const pageId = input.dataset.pageId;
     const field  = input.dataset.field;
     const value  = input.value.trim();
+    if (input.tagName === 'SELECT') input.dataset.empty = String(!value);
 
     if (!state.stewardship[pageId]) state.stewardship[pageId] = { expert: '', editor: '', department: '' };
     state.stewardship[pageId][field] = value;

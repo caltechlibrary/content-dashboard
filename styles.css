@@ -647,14 +647,20 @@ h3 { font-size: 1.125rem; }
   transition: border-color .12s, background-color .12s;
 }
 
-.steward-input:placeholder-shown {
+input.steward-input:placeholder-shown,
+.steward-input[data-empty="true"] {
   background-color: #fffaf6;
   border-color: #e8c9b0;
+  font-style: italic;
+  color: var(--text-3);
 }
 
-.steward-input:not(:placeholder-shown) {
+input.steward-input:not(:placeholder-shown),
+.steward-input[data-empty="false"] {
   background-color: #f6fdf7;
   border-color: #b8ddbf;
+  font-style: normal;
+  color: var(--text);
 }
 
 .steward-input:focus {
