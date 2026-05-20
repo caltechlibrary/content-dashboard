@@ -14,12 +14,14 @@ const state = {
   msSort:  { col: 'guide', dir: 'asc' },
   // sort col names: 'expert' (was 'steward'), 'editor' (was 'deputy')
   reportFilters: {
-    stale:      { expert: '', olderThan: '' },
+    stale:        { expert: '', olderThan: '' },
+    unpublished:  {},
     unassigned: { guide: '', missing: 'either' },
     missing:    { guide: '' },
     hidden:     { guide: '' },
-    'rg-stale': { owner: '', olderThan: '' },
-    'rg-hidden':{ guide: '' },
+    'rg-stale':       { owner: '', olderThan: '' },
+    'rg-hidden':      { guide: '' },
+    'rg-unpublished': {},
   },
 };
 
@@ -698,13 +700,15 @@ function renderMyResearchGuides() {
 
 // ── View: Reports ──────────────────────────────────────────────────
 const WEBSITE_REPORTS = [
-  { id:'stale',  icon:'🕐', title:'Stale content', desc:'Pages not updated recently. Good for identifying maintenance priorities.' },
-  { id:'hidden', icon:'🙈', title:'Hidden pages',  desc:'Pages that are hidden. May be drafts or retired content worth reviewing.' },
+  { id:'stale',        icon:'🕐', title:'Stale content',        desc:'Pages not updated recently. Good for identifying maintenance priorities.' },
+  { id:'hidden',       icon:'🙈', title:'Hidden website pages',          desc:'Pages that are hidden. May be drafts or retired content worth reviewing.' },
+  { id:'unpublished',  icon:'📋', title:'Unpublished pages',    desc:'Pages in draft status not visible to patrons. Good to run during cleanup.' },
 ];
 
 const RESEARCH_REPORTS = [
-  { id:'rg-stale',  icon:'🕐', title:'Stale guides',   desc:'Guides not updated recently. Good for identifying maintenance priorities.' },
-  { id:'rg-hidden', icon:'🙈', title:'Hidden pages',    desc:'Guides with hidden pages. May be drafts or retired content worth reviewing.' },
+  { id:'rg-stale',       icon:'🕐', title:'Stale guides',      desc:'Guides not updated recently. Good for identifying maintenance priorities.' },
+  { id:'rg-hidden',      icon:'🙈', title:'Hidden guide pages',       desc:'Guides with hidden pages. May be drafts or retired content worth reviewing.' },
+  { id:'rg-unpublished', icon:'📋', title:'Unpublished guides', desc:'Guides in draft status not visible to patrons. Good to run during cleanup.' },
 ];
 
 function renderReports() {
@@ -750,12 +754,14 @@ function renderReportPanel() {
   const panel = el('report-panel');
   if (!panel) return;
   switch (state.report) {
-    case 'stale':      renderStalePanel(panel);      break;
-    case 'unassigned': renderUnassignedPanel(panel);  break;
-    case 'missing':    renderMissingPanel(panel);     break;
-    case 'hidden':     renderHiddenPanel(panel);      break;
-    case 'rg-stale':   renderRgStalePanel(panel);     break;
-    case 'rg-hidden':  renderRgHiddenPanel(panel);    break;
+    case 'stale':       renderStalePanel(panel);       break;
+    case 'unassigned':  renderUnassignedPanel(panel);  break;
+    case 'missing':     renderMissingPanel(panel);     break;
+    case 'hidden':      renderHiddenPanel(panel);      break;
+    case 'unpublished': renderUnpublishedPanel(panel); break;
+    case 'rg-stale':       renderRgStalePanel(panel);       break;
+    case 'rg-hidden':      renderRgHiddenPanel(panel);      break;
+    case 'rg-unpublished': renderRgUnpublishedPanel(panel); break;
   }
 }
 
@@ -1168,6 +1174,160 @@ function runRgHiddenReport() {
     { label:'Owner',        get: p => p.guideOwner ?? '' },
     { label:'Last updated', get: p => formatDate(p.updated) },
     { label:'URL',          get: p => p.pageFriendlyUrl ?? '' },
+  ]));
+}
+
+// ── Report: Unpublished website guides ────────────────────────────
+function renderUnpublishedPanel(panel) {
+  panel.innerHTML = `
+    <div class="report-panel">
+      <p class="report-panel-title">Unpublished pages report</p>
+      <div class="filter-row">
+        <button class="btn-run" id="r-wpu-run">Run report</button>
+      </div>
+      <div id="r-wpu-results"></div>
+    </div>`;
+  el('r-wpu-run')?.addEventListener('click', () => runUnpublishedReport());
+  el('r-wpu-results').innerHTML = emptyPromptHtml();
+}
+
+async function runUnpublishedReport() {
+  const resultsEl = el('r-wpu-results');
+  const btn = el('r-wpu-run');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+  resultsEl.innerHTML = '';
+
+  let guides;
+  try {
+    const res = await fetch(`${CONFIG.WORKER_URL}/guides?status=0&expand=owner`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    guides = await res.json();
+  } catch (err) {
+    resultsEl.innerHTML = `<div class="empty-state">Failed to load: ${esc(err.message)}</div>`;
+    btn.textContent = 'Run report';
+    btn.disabled = false;
+    return;
+  }
+
+  btn.textContent = 'Run report';
+  btn.disabled = false;
+
+  guides = guides.filter(g => CONFIG.WEBSITE_PAGE_GROUPS.includes(Number(g.group_id)));
+
+  if (!guides.length) {
+    resultsEl.innerHTML = `<div class="empty-state">No unpublished pages found.</div>`;
+    return;
+  }
+
+  const rows = guides.map(g => {
+    const title   = decodeEntities(g.name || g.title || '(untitled)');
+    const url     = g.friendly_url || g.url || null;
+    const owner   = g.owner ? `${g.owner.first_name ?? ''} ${g.owner.last_name ?? ''}`.trim() : '—';
+    const updated = formatDate(g.updated);
+    const titleHtml = url
+      ? `<a class="page-link" href="${esc(url)}" target="_blank" rel="noopener">${esc(title)}</a>`
+      : esc(title);
+    return { title, url, owner, updated, titleHtml };
+  }).sort((a, b) => a.title.localeCompare(b.title));
+
+  resultsEl.innerHTML = `
+    <div class="result-actions">
+      <span class="result-count">${rows.length} result${rows.length !== 1 ? 's' : ''}</span>
+      <button class="btn-export" id="r-wpu-export">Export CSV</button>
+    </div>
+    <div class="table-wrap"><table>
+      <colgroup><col style="width:40%"><col style="width:30%"><col style="width:30%"></colgroup>
+      <thead><tr><th>Guide</th><th>Owner</th><th>Last updated</th></tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td>${r.titleHtml}</td>
+        <td class="col-guide">${esc(r.owner)}</td>
+        <td>${esc(r.updated)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+
+  el('r-wpu-export')?.addEventListener('click', () => exportCSV('unpublished-website-guides.csv', rows, [
+    { label:'Guide',        get: r => r.title },
+    { label:'Owner',        get: r => r.owner },
+    { label:'Last updated', get: r => r.updated },
+    { label:'URL',          get: r => r.url ?? '' },
+  ]));
+}
+
+// ── Report: Unpublished research guides ───────────────────────────
+function renderRgUnpublishedPanel(panel) {
+  panel.innerHTML = `
+    <div class="report-panel">
+      <p class="report-panel-title">Unpublished guides report</p>
+      <div class="filter-row">
+        <button class="btn-run" id="r-rgu-run">Run report</button>
+      </div>
+      <div id="r-rgu-results"></div>
+    </div>`;
+  el('r-rgu-run')?.addEventListener('click', () => runRgUnpublishedReport());
+  el('r-rgu-results').innerHTML = emptyPromptHtml();
+}
+
+async function runRgUnpublishedReport() {
+  const resultsEl = el('r-rgu-results');
+  const btn = el('r-rgu-run');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+  resultsEl.innerHTML = '';
+
+  let guides;
+  try {
+    const res = await fetch(`${CONFIG.WORKER_URL}/guides?status=0&expand=owner`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    guides = await res.json();
+  } catch (err) {
+    resultsEl.innerHTML = `<div class="empty-state">Failed to load: ${esc(err.message)}</div>`;
+    btn.textContent = 'Run report';
+    btn.disabled = false;
+    return;
+  }
+
+  btn.textContent = 'Run report';
+  btn.disabled = false;
+
+  guides = guides.filter(g => CONFIG.RESEARCH_GUIDE_GROUPS.includes(Number(g.group_id)));
+
+  if (!guides.length) {
+    resultsEl.innerHTML = `<div class="empty-state">No unpublished guides found.</div>`;
+    return;
+  }
+
+  const rows = guides.map(g => {
+    const title    = decodeEntities(g.name || g.title || '(untitled)');
+    const url      = g.friendly_url || g.url || null;
+    const owner    = g.owner ? `${g.owner.first_name ?? ''} ${g.owner.last_name ?? ''}`.trim() : '—';
+    const updated  = formatDate(g.updated);
+    const titleHtml = url
+      ? `<a class="page-link" href="${esc(url)}" target="_blank" rel="noopener">${esc(title)}</a>`
+      : esc(title);
+    return { title, url, owner, updated, titleHtml };
+  }).sort((a, b) => a.title.localeCompare(b.title));
+
+  resultsEl.innerHTML = `
+    <div class="result-actions">
+      <span class="result-count">${rows.length} result${rows.length !== 1 ? 's' : ''}</span>
+      <button class="btn-export" id="r-rgu-export">Export CSV</button>
+    </div>
+    <div class="table-wrap"><table>
+      <colgroup><col style="width:40%"><col style="width:30%"><col style="width:30%"></colgroup>
+      <thead><tr><th>Guide</th><th>Owner</th><th>Last updated</th></tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td>${r.titleHtml}</td>
+        <td class="col-guide">${esc(r.owner)}</td>
+        <td>${esc(r.updated)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+
+  el('r-rgu-export')?.addEventListener('click', () => exportCSV('unpublished-guides.csv', rows, [
+    { label:'Guide',        get: r => r.title },
+    { label:'Owner',        get: r => r.owner },
+    { label:'Last updated', get: r => r.updated },
+    { label:'URL',          get: r => r.url ?? '' },
   ]));
 }
 

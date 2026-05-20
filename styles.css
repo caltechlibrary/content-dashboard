@@ -490,35 +490,45 @@ h3 { font-size: 1.125rem; }
   margin-bottom: 1.25rem;
 }
 
+.report-col {
+  border: 1px solid #c9cdd4;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+}
+
 .report-col-heading {
   font-size: 1rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .06em;
-  color: var(--text-3);
-  margin-bottom: 0.75rem;
+  color: var(--text-2);
+  background: #eef0f3;
+  border-bottom: 1px solid #c9cdd4;
+  padding: 0.6rem 1rem;
+  margin: 0;
 }
 
 /* ── Report cards ────────────────────────────────────────────────── */
 .report-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
 }
 
 .report-card {
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 1rem;
+  padding: 0.875rem 1rem;
   cursor: pointer;
-  transition: border-color .15s;
+  transition: background .12s;
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--main-bg);
 }
 
-.report-card:hover { border-color: #9ca3af; }
-.report-card.active { border-color: var(--teal); }
+.report-card:last-child { border-bottom: none; }
+.report-card:hover { background: var(--bg-secondary); }
+.report-card.active { background: #edf7f1; border-left: 3px solid var(--teal); }
 
 .report-card-icon {
   font-size: 1.25rem;
@@ -527,9 +537,9 @@ h3 { font-size: 1.125rem; }
 }
 
 .report-card h3 {
-  font-size: 1.125rem;
+  font-size: 1rem;
   font-weight: 500;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   color: var(--text);
 }
 
@@ -669,5 +679,5 @@ h3 { font-size: 1.125rem; }
   }
 
   .metrics { grid-template-columns: repeat(2, 1fr); }
-  .report-columns { grid-template-columns: 1fr; }
+  .report-columns { grid-template-columns: 1fr; gap: 1rem; }
 }
