@@ -1,0 +1,18 @@
+
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: content-dashboard
+abstract: |-
+  LibGuides has a highlevel view of ownserhsip where Caltech Library has specific people responsible for specific pages. This presents challenged when doing content audits or other reviews of our website content deployed through LibGuides. Taking a development at the edges approach, content-dashboard, provides for the user level responsibility for managing content in LibGuides.
+authors:
+  - family-names: Smith
+    given-names: Twilia
+    email: twila@caltech.edu
+
+
+repository-code: "https://github.com/caltechlibrary/content-dashboard"
+version: 0.0.0
+
+
+

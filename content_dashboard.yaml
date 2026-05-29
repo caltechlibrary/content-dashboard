@@ -1,0 +1,174 @@
+##
+# content-dashboard.yaml provides a Web Service backed by dataset v2.4.1 to manage
+# content audits and analysis for Caltech Library's LibGuides deployment and website.
+##
+host: localhost:8200
+htdocs: htdocs
+schemas:
+  stewardship_model:
+    id: stewardship_model
+    description: |
+      Model for content stewardship assignments. Each entry represents
+      the expert and editor assignments for a LibGuides page.
+    elements:
+      - id: pageId
+        type: text
+        attributes:
+          name: pageId
+          required: true
+        pattern: "^[0-9]+$"
+        is_primary_id: true
+        label: "Page ID"
+
+      - id: expert
+        type: text
+        attributes:
+          name: expert
+        label: "Expert"
+
+      - id: editor
+        type: text
+        attributes:
+          name: editor
+        label: "Editor"
+
+      - id: department
+        type: select
+        attributes:
+          name: department
+        options:
+          - {"": "Unassigned"}
+          - {"Archives": "Archives"}
+          - {"ACS": "ACS"}
+          - {"CLOPS": "CLOPS"}
+          - {"DLD": "DLD"}
+          - {"LIT": "LIT"}
+          - {"RS": "RS"}
+        label: "Department"
+
+      - id: lastUpdated
+        type: datetime-local
+        attributes:
+          name: lastUpdated
+          required: true
+        generator: "now"
+        label: "Last Updated"
+
+      - id: updatedBy
+        type: text
+        attributes:
+          name: updatedBy
+        label: "Updated By"
+
+  audit_model:
+    id: audit_model
+    description: |
+      Model for audit check results. Each entry tracks the audit status
+      (links, accessibility, accuracy) for a page or guide.
+    elements:
+      - id: type
+        type: select
+        attributes:
+          name: type
+          required: true
+        options:
+          - {"page": "Page"}
+          - {"guide": "Guide"}
+        is_primary_id: true
+        label: "Content Type"
+
+      - id: id
+        type: text
+        attributes:
+          name: id
+          required: true
+        pattern: "^[0-9]+$"
+        is_primary_id: true
+        label: "ID"
+
+      - id: links
+        type: checkbox
+        attributes:
+          name: links
+          required: true
+        label: "Links Check Passed"
+
+      - id: accessibility
+        type: checkbox
+        attributes:
+          name: accessibility
+          required: true
+        label: "Accessibility Check Passed"
+
+      - id: accuracy
+        type: checkbox
+        attributes:
+          name: accuracy
+          required: true
+        label: "Accuracy Check Passed"
+
+      - id: updatedAt
+        type: datetime-local
+        attributes:
+          name: updatedAt
+          required: true
+        generator: "now"
+        label: "Audit Updated"
+
+      - id: updatedBy
+        type: text
+        attributes:
+          name: updatedBy
+        label: "Updated By"
+
+# Collections — note: list format (- dataset: ...), not a mapping.
+# schema: references a key from the schemas: map above.
+# Arrow operators (->, ->>) require SQLite 3.38+; SQLite booleans are 0/1.
+collections:
+  - dataset: stewardship.ds
+    schema: stewardship_model
+    validate: true
+    keys: true
+    read: true
+    create: true
+    update: true
+    delete: true
+    query:
+      by_expert: |
+        SELECT src FROM content_stewardship WHERE src->>'expert' = ?
+      by_editor: |
+        SELECT src FROM content_stewardship WHERE src->>'editor' = ?
+      by_department: |
+        SELECT src FROM content_stewardship WHERE src->>'department' = ?
+      unassigned: |
+        SELECT src FROM content_stewardship
+        WHERE (src->>'expert' IS NULL OR src->>'expert' = '')
+          AND (src->>'editor' IS NULL OR src->>'editor' = '')
+      needs_update: |
+        SELECT src FROM content_stewardship
+        WHERE src->>'lastUpdated' < datetime('now', '-365 days')
+
+  - dataset: audit.ds
+    schema: audit_model
+    validate: true
+    keys: true
+    read: true
+    create: true
+    update: true
+    delete: true
+    query:
+      by_type: |
+        SELECT src FROM content_audit WHERE src->>'type' = ?
+      by_id: |
+        SELECT src FROM content_audit WHERE src->>'id' = ?
+      by_type_and_id: |
+        SELECT src FROM content_audit WHERE src->>'type' = ? AND src->>'id' = ?
+      stale_audits: |
+        SELECT src FROM content_audit
+        WHERE src->>'updatedAt' < datetime('now', '-90 days')
+      incomplete: |
+        SELECT src FROM content_audit
+        WHERE src->>'links' = 0
+           OR src->>'accessibility' = 0
+           OR src->>'accuracy' = 0
+

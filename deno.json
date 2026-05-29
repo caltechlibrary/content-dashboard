@@ -1,0 +1,5 @@
+{
+  "tasks": {
+    "gen-code": "deno run --allow-read --allow-write ./cmt.ts codemeta.json about.md CITATION.cff version.ts"
+  }
+}
