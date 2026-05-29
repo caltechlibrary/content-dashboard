@@ -1145,60 +1145,30 @@ state.names = accounts
 3. **datasetd runs behind Shibboleth-protected web server**
 4. **Browser makes authenticated requests** to datasetd via Shibboleth
 
-### LibGuides API Authentication Question
+### LibGuides API Authentication
 
-**Current Understanding**:
+**Resolved**: The LibGuides REST API (`lgapi-us.libapps.com/1.2/...`) uses **OAuth 2.0 client credentials** exclusively. It does not accept SAML/Shibboleth authentication.
 
-- LibGuides **user interface** can use campus single sign-on (Shibboleth) ✅
-- LibGuides **API** authentication is **TBD** ⚠️
+The fact that both `apps.library.caltech.edu` and the LibGuides admin *web interface* use Shibboleth SSO for user login is a separate concern. That SSO covers user identity for interactive sessions — it has no bearing on machine-to-machine API authentication. The LibGuides API requires an institution-issued `client_id` and `client_secret` (provided by Springshare) exchanged server-side for a Bearer token.
 
-**Two Scenarios**:
+**Why the browser cannot call the LibGuides API directly**:
 
-#### Scenario A: LibGuides API Supports Shibboleth ✅
+1. **Secret exposure**: `client_id` and `client_secret` placed in browser JavaScript are visible to anyone who views page source. This is the same reason the Cloudflare Worker was required in the original architecture.
+2. **CORS barrier**: Cross-origin requests from `apps.library.caltech.edu` to `lgapi-us.libapps.com` require LibGuides to emit permissive CORS headers for that origin — this is outside our control and unlikely to be supported.
 
-If LibGuides API accepts Shibboleth authentication:
-
-```
-Browser → Shibboleth SP → LibGuides API
-     (datasetd)      (Shibboleth)
-```
-
-- **Impact**: Backend proxy service **not needed** for authentication
-- **Benefit**: Simplest architecture
-- **Action**: Confirm with Springshare/LibGuides support
-
-#### Scenario B: LibGuides API Requires OAuth Only ⚠️
-
-If LibGuides API only supports OAuth (current situation):
+**Required**: A backend proxy service that holds the OAuth credentials server-side, proxies LibGuides API requests from authenticated browser sessions, and strips PII before returning responses to the browser.
 
 ```
-Browser → datasetd → Backend Proxy → LibGuides API
-                 (Shibboleth)    (OAuth)
+Browser (Shibboleth session) → Backend Proxy (Deno, port 8080)
+                                    ↓  OAuth client credentials
+                               LibGuides API (lgapi-us.libapps.com)
 ```
-
-- **Impact**: Backend proxy service **required** for OAuth
-- **Reason**: OAuth client credentials must not be exposed in browser
-- **Action**: Implement backend proxy service (Deno+TypeScript)
-
-**Backend Proxy Responsibilities**:
-
-1. Accept requests from authenticated users (Shibboleth-protected)
-2. Manage OAuth token for LibGuides API
-3. Proxy LibGuides API requests
-4. Strip PII from responses
-5. Cache responses to reduce API calls
-
-**Recommendation**:
-
-- **Confirm with Springshare** whether LibGuides API supports Shibboleth
-- **Assume OAuth-only** for now and plan for backend proxy
-- **If Shibboleth works**, simplify architecture by removing proxy
 
 ### Middleware Decision
 
-**Question**: Do we need middleware for data validation before CRUD operations?
+**Question**: Do we need custom middleware for data validation before CRUD operations?
 
-**Answer**: **NO**
+**Answer**: **NO** — datasetd handles this via the models package.
 
 **Rationale**:
 
@@ -1206,10 +1176,7 @@ Browser → datasetd → Backend Proxy → LibGuides API
 2. **Server-side validation** - Validation happens in Go via the models package before data is stored
 3. **datasetd has collection-level permissions** - read, create, update, delete
 4. **datasetd has SQL query support** - for complex reporting
-5. **No transformation needed** - data structures are straightforward
-6. **Shibboleth handles authentication** - at web server level
-
-**This is a NEW FEATURE** in datasetd that provides robust validation capabilities without requiring custom middleware.
+5. **Shibboleth handles authentication** - at web server level
 
 **Testing Required**: Since this is a newer feature, we should test that:
 
@@ -1218,7 +1185,15 @@ Browser → datasetd → Backend Proxy → LibGuides API
 - Required fields are enforced
 - Primary ID fields are handled correctly
 
-**Conclusion**: **No custom middleware required** for dataset CRUD operations.
+**Question**: Do we need a backend proxy for the LibGuides API?
+
+**Answer**: **YES** — a Deno backend proxy service is required.
+
+**Rationale**: The LibGuides API uses OAuth 2.0 client credentials which must be kept server-side. The browser cannot call the LibGuides API directly (credential exposure risk + CORS). See "LibGuides API Authentication" above.
+
+The proxy is not middleware — it is a **separate service** responsible only for LibGuides API access. It does not intercept or transform datasetd operations.
+
+**Conclusion**: No custom middleware for dataset CRUD. A separate backend proxy service is required for LibGuides API access.
 
 ---
 
@@ -1306,22 +1281,48 @@ Browser → datasetd → Backend Proxy → LibGuides API
 ### 4. Repository Restructuring
 
 **Current**: Flat structure with mixed concerns  
-**Target**: 
+**Target**:
 
-- `htdocs/` - Browser-served static files
-- `content-dashboard.yaml` - datasetd configuration
-- `dev-notes/` - Development Notes
-- `./` - Software Documentation
+- `htdocs/` - Browser-served static files (`index.html`, `app.js`, `styles.css`)
+- `content_dashboard.yaml` - Unified configuration for datasetd and the Deno proxy (single source of truth)
+- `worker.js` - Moved to repo root (reference only; superseded by datasetd + Deno proxy; delete post-migration)
+- `wrangler.toml` - Stays at repo root (reference only; delete post-migration)
+- `dev-notes/` - Development notes and planning documents
+- `./` - Software documentation
+
+**Note on `htdocs/config.js`**: This file is removed entirely. Browser configuration is served by the Deno proxy via `GET /api/config` (reads `content_dashboard.yaml` and returns browser-relevant constants as JSON). This makes `content_dashboard.yaml` the single source of truth for all configuration.
+
+**Note on `worker.js`**: This is Cloudflare Worker server-side code, not browser code. It must not live in `htdocs/`. It moves to the repo root as a migration reference and is deleted once the Deno proxy replicates its behaviour.
 
 ### 5. Authentication
 
 **Current**: No authentication, open access via GitHub Pages  
-**Target**: Shibboleth-protected in production  
-**LibGuides API**: OAuth (current), Shibboleth support TBD
+**Target**: Shibboleth-protected in production at `apps.library.caltech.edu`  
+**LibGuides API**: OAuth 2.0 client credentials only — backend proxy required (see above)
 
-### 6. Middleware Decision
+### 6. Services Required on apps.library.caltech.edu
 
-**Question**: Do we need Deno+TypeScript middleware for validation?  
-**Answer**: **NO** - datasetd has sufficient built-in features  
-**Question**: Do we need middleware to proxy to LibGuide's API
-**Answer**: **NO** - the browser takes advantage of single sign-on, and talks to LibGuides API integration, we save updates in our dataset collection via it's JSON API
+Three services must run to support the application in production:
+
+| **Service** | **Port** | **Technology** | **Responsibility** |
+|-------------|----------|----------------|-------------------|
+| Apache + Shibboleth SP | 443 | Already deployed | TLS termination, user AuthN/AuthZ, reverse proxy routing |
+| datasetd | 8200 | Go binary | Serves `htdocs/` static files; exposes JSON CRUD API for stewardship.ds and audit.ds |
+| Deno backend proxy | 8080 | Deno + TypeScript | LibGuides OAuth proxy; `/api/whoami` (reads Shibboleth `REMOTE_USER`); `/api/config` (browser config) |
+
+**Apache reverse proxy routing** (all under `/content-dashboard/`):
+
+```
+/content-dashboard/api/libguides/  →  Deno proxy :8080
+/content-dashboard/api/whoami      →  Deno proxy :8080
+/content-dashboard/api/config      →  Deno proxy :8080
+/content-dashboard/                →  datasetd :8200  (static files + dataset JSON API)
+```
+
+Shibboleth protects the entire `/content-dashboard/` location block. Apache forwards the authenticated identity as `RequestHeader set Remote-User "%{REMOTE_USER}e"` to the Deno proxy, which exposes it via `/api/whoami` for use as the `updatedBy` field.
+
+### 7. Middleware Decision
+
+**Dataset CRUD**: No custom middleware — datasetd handles validation, CRUD, and queries via the models package.
+
+**LibGuides API**: Backend proxy service required (Deno). Not middleware — a separate service that holds OAuth credentials, proxies LibGuides requests, and strips PII. The browser never calls LibGuides directly.

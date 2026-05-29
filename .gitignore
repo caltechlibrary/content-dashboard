@@ -10,3 +10,4 @@ dist
 man
 stewardship.ds
 audit.ds
+htdocs/dev-config.js

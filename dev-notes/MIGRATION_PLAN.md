@@ -732,31 +732,52 @@ dataset load stewardship.ds < stewardship.jsonl
 
 ## 🎨 FRONTEND MODIFICATIONS
 
-### Configuration Updates
+### Configuration Approach
 
-**File**: `htdocs/config.js`
+**`htdocs/config.js` is removed entirely.**
 
-```javascript
-// New configuration for datasetd
-const CONFIG = {
-  // In production: /content-dashboard (path prefix on apps.library.caltech.edu)
-  // In development: http://localhost:8200 (direct to datasetd)
-  DATASETD_URL: '/content-dashboard',
-  STEWARDSHIP_COLLECTION: 'stewardship.ds',
-  AUDIT_COLLECTION: 'audit.ds',
-  
-  // Backend proxy for LibGuides — same path prefix in production,
-  // http://localhost:8080 in development
-  PROXY_URL: '/content-dashboard',
-  
-  // Existing configuration
-  STALE_DAYS: 365,
-  VERY_STALE_DAYS: 730,
-  SESSION_KEY: 'cs_guides_v1',
-  WEBSITE_PAGE_GROUPS: [26856, 27077],
-  RESEARCH_GUIDE_GROUPS: [10729],
-  DEPARTMENTS: ['Archives', 'ACS', 'CLOPS', 'DLD', 'LIT', 'RS'],
-};
+All configuration lives in `content_dashboard.yaml` at the repo root — a single source of truth for datasetd, the Deno proxy, and the browser. The Deno proxy reads this file at startup and exposes the browser-relevant subset via `GET /api/config` as JSON.
+
+`app.js` calls `loadConfig()` before any other data fetch, stores the result in a module-level `CONFIG` object, and proceeds as before.
+
+**Browser-visible config keys returned by `GET /api/config`**:
+
+```json
+{
+  "stale_days": 365,
+  "very_stale_days": 730,
+  "session_key": "cs_guides_v1",
+  "website_page_groups": [26856, 27077],
+  "research_guide_groups": [10729],
+  "departments": ["Archives", "ACS", "CLOPS", "DLD", "LIT", "RS"]
+}
+```
+
+URL prefixes (`DATASETD_URL`, `PROXY_URL`) are **not** in the config response — the browser uses relative paths (`/content-dashboard/api/...`) in production and configurable dev overrides set via a small `htdocs/dev-config.js` excluded from the repo (gitignored). In production no dev override file exists and defaults are relative paths.
+
+**`content_dashboard.yaml` additions for the proxy**:
+
+```yaml
+# Browser-facing configuration (served via GET /api/config)
+browser_config:
+  stale_days: 365
+  very_stale_days: 730
+  session_key: "cs_guides_v1"
+  website_page_groups: [26856, 27077]
+  research_guide_groups: [10729]
+  departments: ["Archives", "ACS", "CLOPS", "DLD", "LIT", "RS"]
+
+# Deno backend proxy configuration
+proxy:
+  port: 8080
+  libguides:
+    base_url: "https://lgapi-us.libapps.com/1.2"
+    token_url: "https://lgapi-us.libapps.com/1.2/oauth/token"
+    client_id: "${LIBGUIDES_CLIENT_ID}"
+    client_secret: "${LIBGUIDES_CLIENT_SECRET}"
+  cache:
+    enabled: true
+    ttl: 3600
 ```
 
 ### Data Loading Updates

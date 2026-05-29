@@ -1,3 +1,41 @@
+// ── Configuration ──────────────────────────────────────────────────
+// Populated at startup by loadConfig() via GET /api/config from the proxy.
+// In development, create htdocs/dev-config.js (gitignored) to set:
+//   window.__DEV_CONFIG__ = { apiBase: 'http://localhost:8080', datasetBase: 'http://localhost:8200' };
+let CONFIG = {};
+
+async function loadConfig() {
+  const dev = window.__DEV_CONFIG__ || {};
+  const apiBase      = dev.apiBase      ?? '';
+  const datasetBase  = dev.datasetBase  ?? '';
+
+  const res = await fetch(`${apiBase}/content-dashboard/api/config`);
+  if (!res.ok) throw new Error(`Config fetch failed: ${res.status}`);
+  const remote = await res.json();
+
+  CONFIG = {
+    STALE_DAYS:            remote.stale_days,
+    VERY_STALE_DAYS:       remote.very_stale_days,
+    SESSION_KEY:           remote.session_key,
+    WEBSITE_PAGE_GROUPS:   remote.website_page_groups,
+    RESEARCH_GUIDE_GROUPS: remote.research_guide_groups,
+    DEPARTMENTS:           remote.departments,
+    apiBase,
+    datasetBase,
+    currentUser: 'unknown',
+  };
+}
+
+async function loadCurrentUser() {
+  try {
+    const res = await fetch(`${CONFIG.apiBase}/content-dashboard/api/whoami`);
+    if (res.ok) {
+      const data = await res.json();
+      CONFIG.currentUser = data.user || 'unknown';
+    }
+  } catch { /* leave as 'unknown' */ }
+}
+
 // ── State ──────────────────────────────────────────────────────────
 const state = {
   view: 'my-website-pages',
@@ -143,14 +181,16 @@ async function syncAudit(btnId) {
   btn.textContent = 'Saving…';
   await new Promise(r => setTimeout(r, 2500));
   try {
-    const ar = await fetch(`${CONFIG.WORKER_URL}/audit`);
-    if (ar.ok) {
-      const entries = await ar.json();
-      const kvAudit = {};
-      for (const { key, value } of entries) {
-        if (value) kvAudit[key] = value;
-      }
-      state.audit = { ...state.audit, ...kvAudit };
+    const base = CONFIG.datasetBase;
+    const keysRes = await fetch(`${base}/content-dashboard/api/audit.ds/keys`);
+    if (keysRes.ok) {
+      const keys = await keysRes.json();
+      const fresh = {};
+      await Promise.all(keys.map(async key => {
+        const r = await fetch(`${base}/content-dashboard/api/audit.ds/object/${encodeURIComponent(key)}`);
+        if (r.ok) fresh[key] = await r.json();
+      }));
+      state.audit = { ...state.audit, ...fresh };
       localStorage.setItem('audit_cache', JSON.stringify(state.audit));
     }
   } catch { /* keep local state */ }
@@ -190,10 +230,10 @@ async function clearAuditField(field, tbodyId) {
   await Promise.all(keysToUpdate.map(key => {
     const [type, ...rest] = key.split(':');
     const id = rest.join(':');
-    return fetch(`${CONFIG.WORKER_URL}/audit`, {
+    return fetch(`${CONFIG.datasetBase}/content-dashboard/api/audit.ds/object/${encodeURIComponent(key)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, id, checks: state.audit[key] }),
+      body: JSON.stringify({ type, id, ...state.audit[key], updatedBy: CONFIG.currentUser }),
     });
   }));
 }
@@ -205,10 +245,10 @@ async function saveAuditCheck(key, field, checked) {
   localStorage.setItem('audit_cache', JSON.stringify(state.audit));
   const [type, ...rest] = key.split(':');
   const id = rest.join(':');
-  await fetch(`${CONFIG.WORKER_URL}/audit`, {
+  await fetch(`${CONFIG.datasetBase}/content-dashboard/api/audit.ds/object/${encodeURIComponent(key)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type, id, checks: current }),
+    body: JSON.stringify({ type, id, ...current, updatedBy: CONFIG.currentUser }),
   });
 }
 
@@ -318,44 +358,30 @@ function processGuides(guides) {
 
 // ── Data fetching ──────────────────────────────────────────────────
 async function loadData(force = false) {
-  // Load stewardship from KV; if empty, seed from stewardship.json (one-time migration)
+  // Load stewardship from datasetd
   try {
-    const sr = await fetch(`${CONFIG.WORKER_URL}/stewardship`);
-    if (sr.ok) {
-      const kvData = await sr.json();
-      if (Object.keys(kvData).length > 0) {
-        state.stewardship = kvData;
-      } else {
-        // KV is empty — seed from stewardship.json
-        const jr = await fetch('stewardship.json?_=' + Date.now());
-        if (jr.ok) {
-          const jsonData = await jr.json();
-          state.stewardship = jsonData;
-          // Write each entry to KV so future loads come from there
-          await Promise.all(Object.entries(jsonData).map(([pageId, entry]) =>
-            fetch(`${CONFIG.WORKER_URL}/stewardship`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ pageId, expert: entry.expert || '', editor: entry.editor || '', department: entry.department || '' }),
-            })
-          ));
-        }
-      }
+    const base = CONFIG.datasetBase;
+    const keysRes = await fetch(`${base}/content-dashboard/api/stewardship.ds/keys`);
+    if (keysRes.ok) {
+      const keys = await keysRes.json();
+      const result = {};
+      await Promise.all(keys.map(async key => {
+        const r = await fetch(`${base}/content-dashboard/api/stewardship.ds/object/${encodeURIComponent(key)}`);
+        if (r.ok) result[key] = await r.json();
+      }));
+      state.stewardship = result;
     }
-  } catch { /* KV unavailable — stewardship stays empty */ }
+  } catch { /* datasetd unavailable — stewardship stays empty */ }
 
-  // Fetch staff accounts for name lists (emails are stripped by the worker)
+  // Fetch staff accounts for name lists (proxy strips PII, only id/first_name/last_name returned)
   try {
-    const ar = await fetch(`${CONFIG.WORKER_URL}/accounts`);
+    const ar = await fetch(`${CONFIG.apiBase}/content-dashboard/api/libguides/accounts`);
     if (ar.ok) {
       const accounts = await ar.json();
       state.names = accounts
         .filter(a => {
           if (!a.first_name && !a.last_name) return false;
-          const email = (a.email || '').toLowerCase();
-          if (email.endsWith('@springshare.com')) return false;
           if ((a.last_name || '').includes('(test)')) return false;
-          if (email.includes('+')) return false; // service/alias accounts
           return true;
         })
         .map(a => `${a.first_name} ${a.last_name}`.trim())
@@ -371,18 +397,20 @@ async function loadData(force = false) {
   } catch { state.audit = {}; }
 
   try {
-    const ar = await fetch(`${CONFIG.WORKER_URL}/audit`);
-    if (ar.ok) {
-      const entries = await ar.json();
-      const kvAudit = {};
-      for (const { key, value } of entries) {
-        if (value) kvAudit[key] = value;
-      }
-      // KV wins so other people's changes come through; local fills in recent unsynced writes
-      state.audit = { ...state.audit, ...kvAudit };
+    const base = CONFIG.datasetBase;
+    const keysRes = await fetch(`${base}/content-dashboard/api/audit.ds/keys`);
+    if (keysRes.ok) {
+      const keys = await keysRes.json();
+      const fresh = {};
+      await Promise.all(keys.map(async key => {
+        const r = await fetch(`${base}/content-dashboard/api/audit.ds/object/${encodeURIComponent(key)}`);
+        if (r.ok) fresh[key] = await r.json();
+      }));
+      // datasetd wins so other people's changes come through; local fills in recent unsynced writes
+      state.audit = { ...state.audit, ...fresh };
       localStorage.setItem('audit_cache', JSON.stringify(state.audit));
     }
-  } catch { /* KV unavailable — use local cache */ }
+  } catch { /* datasetd unavailable — use local cache */ }
 
   if (!force) {
     const cached = sessionStorage.getItem(CONFIG.SESSION_KEY);
@@ -399,7 +427,7 @@ async function loadData(force = false) {
 
   showOverlay('loading');
   try {
-    const res = await fetch(`${CONFIG.WORKER_URL}/guides?status=1&expand=pages,pages.boxes,owner`);
+    const res = await fetch(`${CONFIG.apiBase}/content-dashboard/api/libguides/guides?status=1&expand=pages,pages.boxes,owner`);
     if (!res.ok) throw new Error(`Guides API: HTTP ${res.status}`);
     const guides = await res.json();
     const ts = Date.now();
@@ -1200,7 +1228,7 @@ async function runUnpublishedReport() {
 
   let guides;
   try {
-    const res = await fetch(`${CONFIG.WORKER_URL}/guides?status=0&expand=pages,owner`);
+    const res = await fetch(`${CONFIG.apiBase}/content-dashboard/api/libguides/guides?status=0&expand=pages,owner`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     guides = await res.json();
   } catch (err) {
@@ -1283,7 +1311,7 @@ async function runRgUnpublishedReport() {
 
   let guides;
   try {
-    const res = await fetch(`${CONFIG.WORKER_URL}/guides?status=0&expand=pages,owner`);
+    const res = await fetch(`${CONFIG.apiBase}/content-dashboard/api/libguides/guides?status=0&expand=pages,owner`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     guides = await res.json();
   } catch (err) {
@@ -1483,10 +1511,10 @@ function renderManageStewards() {
     }
 
     const entry = state.stewardship[pageId];
-    fetch(`${CONFIG.WORKER_URL}/stewardship`, {
+    fetch(`${CONFIG.datasetBase}/content-dashboard/api/stewardship.ds/object/${encodeURIComponent(pageId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pageId, expert: entry.expert || '', editor: entry.editor || '', department: entry.department || '' }),
+      body: JSON.stringify({ pageId, expert: entry.expert || '', editor: entry.editor || '', department: entry.department || '', updatedBy: CONFIG.currentUser }),
     });
   });
 }
@@ -1532,7 +1560,7 @@ function renderCurrentView() {
 }
 
 // ── Init ───────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const savedView = localStorage.getItem('last_view');
   if (savedView) state.view = savedView;
 
@@ -1545,5 +1573,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   el('refresh-btn')?.addEventListener('click', () => loadData(true));
   el('retry-btn')?.addEventListener('click',   () => loadData(true));
+
+  try {
+    await loadConfig();
+  } catch (err) {
+    showOverlay('error', `Failed to load configuration: ${err.message}`);
+    return;
+  }
+  await loadCurrentUser();
   loadData();
 });
