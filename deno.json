@@ -1,0 +1,7 @@
+{
+  "tasks": {
+    "check-setup": "deno run --allow-run --allow-read setup_check.ts",
+    "gen-code": "deno run --allow-read --allow-write ./cmt.ts codemeta.json about.md CITATION.cff version.ts",
+	"content-dashboard-api": "datasetd content_dashboard.yaml"
+  }
+}

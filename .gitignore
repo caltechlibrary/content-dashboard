@@ -1,0 +1,13 @@
+.DS_Store
+*~
+*#
+*.tmp
+*.swp
+*.bak
+*.jsonl
+bin
+dist
+man
+stewardship.ds
+audit.ds
+htdocs/dev-config.js
