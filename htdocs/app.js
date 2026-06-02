@@ -1,4 +1,4 @@
-// ── Configuration ──────────────────────────────────────────────────
+// Configuration
 // Populated at startup by loadConfig() via GET /api/config from the proxy.
 // In development, create htdocs/dev-config.js (gitignored) to set:
 //   window.__DEV_CONFIG__ = { apiBase: 'http://localhost:8080', datasetBase: 'http://localhost:8200' };
@@ -36,7 +36,7 @@ async function loadCurrentUser() {
   } catch { /* leave as 'unknown' */ }
 }
 
-// ── State ──────────────────────────────────────────────────────────
+// State 
 const state = {
   view: 'my-website-pages',
   report: 'stale',
@@ -44,13 +44,12 @@ const state = {
   names: [],          // sorted staff names (from /accounts, or derived from guide data)
   guideOptions: [],   // sorted unique guide titles
   selectedName: '',   // shared across Website Pages + Research Guides
-  stewardship: {},    // page_id → { expert, editor } from KV
+  stewardship: {},    // page_id → { expert, editor } from datasetd
   audit: {},          // 'page:{id}' | 'guide:{id}' → { links, accessibility, accuracy }
   manageFilters: { guide: '', showAssigned: true, showUnassigned: true },
   wpSort:  { col: 'guide', dir: 'asc' },
   rgSort:  { col: 'guide', dir: 'asc' },
   msSort:  { col: 'guide', dir: 'asc' },
-  // sort col names: 'expert' (was 'steward'), 'editor' (was 'deputy')
   reportFilters: {
     stale:        { expert: '', olderThan: '' },
     unpublished:  {},
@@ -63,7 +62,7 @@ const state = {
   },
 };
 
-// ── Helpers ────────────────────────────────────────────────────────
+// Helpers
 function sortTh(label, col, sortState) {
   const active = sortState.col === col;
   const arrow  = active ? (sortState.dir === 'asc' ? ' ▲' : ' ▼') : ' ▲';
@@ -112,15 +111,6 @@ function formatTimestamp(ms) {
   return new Date(ms).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
 }
 
-const UNASSIGNED_RE   = /^(tbd|please add|--|n\/a|none|placeholder|add name)$/i;
-const DIVISION_CODE_RE = /^\([A-Z]{1,6}\)$/;
-
-function isUnassigned(val) {
-  if (!val || val.trim() === '') return true;
-  const v = val.trim();
-  return UNASSIGNED_RE.test(v) || DIVISION_CODE_RE.test(v);
-}
-
 function freshnessStatus(updatedStr) {
   const d = daysAgo(updatedStr);
   if (d > CONFIG.VERY_STALE_DAYS) return 'very-stale';
@@ -140,7 +130,6 @@ function freshnessBadge(status) {
 }
 
 function roleBadge(role) {
-  if (role === 'both')   return '<span class="badge badge-info">Both</span>';
   if (role === 'expert') return '<span class="badge badge-info">Expert</span>';
   if (role === 'editor') return '<span class="badge badge-info">Editor</span>';
   return '';
@@ -174,33 +163,6 @@ function auditCells(key) {
   ).join('');
 }
 
-async function syncAudit(btnId) {
-  const btn = el(btnId);
-  if (!btn) return;
-  btn.disabled = true;
-  btn.textContent = 'Saving…';
-  await new Promise(r => setTimeout(r, 2500));
-  try {
-    const base = CONFIG.datasetBase;
-    const keysRes = await fetch(`${base}/content-dashboard/api/audit.ds/keys`);
-    if (keysRes.ok) {
-      const keys = await keysRes.json();
-      const fresh = {};
-      await Promise.all(keys.map(async key => {
-        const r = await fetch(`${base}/content-dashboard/api/audit.ds/object/${encodeURIComponent(key)}`);
-        if (r.ok) fresh[key] = await r.json();
-      }));
-      state.audit = { ...state.audit, ...fresh };
-      localStorage.setItem('audit_cache', JSON.stringify(state.audit));
-    }
-  } catch { /* keep local state */ }
-  renderCurrentView();
-  const freshBtn = el(btnId);
-  if (freshBtn) {
-    freshBtn.textContent = '✓ Saved';
-    setTimeout(() => { const b = el(btnId); if (b) { b.textContent = 'Save Audit'; b.disabled = false; } }, 1500);
-  }
-}
 
 function auditTfoot(tbodyId, leadingCols) {
   const fields = ['links', 'accessibility', 'accuracy'];
@@ -253,41 +215,15 @@ async function saveAuditCheck(key, field, checked) {
 }
 
 function expertCell(name) {
-  return name ? esc(name) : '<span class="muted-italic">Unassigned</span>';
+  return name ? esc(name) : '<span class="muted-italic">—</span>>';
 }
 
 function editorCell(name) {
   return name ? esc(name) : '<span class="muted-italic">—</span>';
 }
 
-// ── Stewardship box parsing ────────────────────────────────────────
-function parseStewardshipBox(html) {
-  if (!html || !html.includes('Page Steward:')) return null;
-  const div = document.createElement('div');
-  div.innerHTML = html;
-  const alert = div.querySelector('.alert.alert-info');
-  if (!alert) return null;
-  const inner = alert.innerHTML;
-  const expertM    = inner.match(/Page Steward:<\/strong>\s*([^<\n]*)/i);
-  const editorM    = inner.match(/Page Deputy:<\/strong>\s*([^<\n]*)/i);
-  const updatedByM = inner.match(/Last Updated by:<\/strong>\s*([^<\n]*)/i);
-  return {
-    expert:        expertM    ? expertM[1].trim()    : null,
-    editor:        editorM    ? editorM[1].trim()    : null,
-    lastUpdatedBy: updatedByM ? updatedByM[1].trim() : null,
-  };
-}
 
-function findStewardship(boxes) {
-  for (const box of (boxes || [])) {
-    if (!box.content) continue;
-    const parsed = parseStewardshipBox(box.content);
-    if (parsed) return parsed;
-  }
-  return null;
-}
-
-// ── Data processing ────────────────────────────────────────────────
+//  Data processing 
 function processGuides(guides) {
   const pages = [];
   const nameSet  = new Set();
@@ -301,25 +237,11 @@ function processGuides(guides) {
       : null;
 
     for (const page of guide.pages) {
-      // stewardship.json is the primary source; box HTML parsing is the fallback
-      const jsonEntry = state.stewardship[String(page.id)];
-      let rawExpert, rawEditor, lastUpdatedBy, hasStewardshipBox;
-
-      if (jsonEntry) {
-        rawExpert         = jsonEntry.expert || null;
-        rawEditor         = jsonEntry.editor || null;
-        hasStewardshipBox = true;
-      } else {
-        const sh          = findStewardship(page.boxes);
-        rawExpert         = sh?.expert        ?? null;
-        rawEditor         = sh?.editor        ?? null;
-        lastUpdatedBy     = sh?.lastUpdatedBy ?? null;
-        hasStewardshipBox = sh !== null;
-      }
-
-      const expert     = isUnassigned(rawExpert) ? null : rawExpert;
-      const editor     = isUnassigned(rawEditor) ? null : rawEditor;
-      const department = jsonEntry?.department || null;
+      const jsonEntry         = state.stewardship[String(page.id)];
+      const expert            = jsonEntry?.expert || null;
+      const editor            = jsonEntry?.editor || null;
+      const department        = jsonEntry?.department || null;
+      const hasStewardshipBox = !!jsonEntry;
 
       if (expert)    nameSet.add(expert);
       if (editor)    nameSet.add(editor);
@@ -342,7 +264,6 @@ function processGuides(guides) {
         expert,
         editor,
         department,
-        lastUpdatedBy,
         hasStewardshipBox,
         freshness:         freshnessStatus(page.updated),
       });
@@ -542,7 +463,7 @@ function renderMyWebsitePages() {
       }).join('');
 
   container.innerHTML = `
-    <div class="topbar"><h1>Website Pages</h1><button class="btn-primary" id="wp-audit-save">Save Audit</button></div>
+    <div class="topbar"><h1>Website Pages</h1></div>
     <div class="content">
       <div class="filter-row">
         <label class="filter-label" for="wp-name">Filter To:</label>
@@ -599,7 +520,7 @@ function renderMyWebsitePages() {
     e.preventDefault();
     clearAuditField(link.dataset.field, link.dataset.tbody);
   });
-  el('wp-audit-save')?.addEventListener('click', () => syncAudit('wp-audit-save'));
+
 }
 
 function renderMyResearchGuides() {
@@ -655,7 +576,7 @@ function renderMyResearchGuides() {
   }).join('') || `<tr><td colspan="7"><div class="empty-state">No research guides found.</div></td></tr>`;
 
   container.innerHTML = `
-    <div class="topbar"><h1>Research Guides</h1><button class="btn-primary" id="rg-audit-save">Save Audit</button></div>
+    <div class="topbar"><h1>Research Guides</h1></div>
     <div class="content">
       <div class="filter-row">
         <label class="filter-label" for="rg-name">Filter To:</label>
@@ -709,8 +630,6 @@ function renderMyResearchGuides() {
     e.preventDefault();
     clearAuditField(link.dataset.field, link.dataset.tbody);
   });
-
-  el('rg-audit-save')?.addEventListener('click', () => syncAudit('rg-audit-save'));
 
   el('rg-name')?.addEventListener('change', e => { state.selectedName = e.target.value; renderCurrentView(); });
   el('rg-reset')?.addEventListener('click', e => { e.preventDefault(); state.selectedName = ''; renderCurrentView(); });
