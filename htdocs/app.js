@@ -277,7 +277,7 @@ function processGuides(guides) {
   state.guideOptions = Array.from(guideSet).sort((a,b) => a.localeCompare(b));
 }
 
-// ── Data fetching ──────────────────────────────────────────────────
+// Data fetching
 async function loadData(force = false) {
   // Load stewardship from datasetd
   try {
@@ -292,7 +292,7 @@ async function loadData(force = false) {
       }));
       state.stewardship = result;
     }
-  } catch { /* datasetd unavailable — stewardship stays empty */ }
+  } catch { console.error('datasetd unavailable — stewardship data not loaded'); }
 
   // Fetch staff accounts for name lists (proxy strips PII, only id/first_name/last_name returned)
   try {
@@ -311,7 +311,7 @@ async function loadData(force = false) {
     }
   } catch { /* fall back to names derived from guide data */ }
 
-  // Load audit state — localStorage first (instant), then KV merged on top
+  // Load audit state — localStorage first (instant), then dataset is merged on top
   try {
     const local = localStorage.getItem('audit_cache');
     if (local) state.audit = JSON.parse(local);
