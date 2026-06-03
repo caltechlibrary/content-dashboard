@@ -67,7 +67,7 @@ function sortTh(label, col, sortState) {
   const active = sortState.col === col;
   const arrow  = active ? (sortState.dir === 'asc' ? ' ▲' : ' ▼') : ' ▲';
   const cls    = `sort-th${active ? ' sort-th-active' : ''}`;
-  return `<th class="${cls}" data-sort="${col}">${label}<span class="sort-indicator${active ? ' sort-active' : ''}">${arrow}</span></th>`;
+  return `<th scope="col" class="${cls}" data-sort="${col}">${label}<span class="sort-indicator${active ? ' sort-active' : ''}">${arrow}</span></th>`;
 }
 
 function esc(v) {
@@ -366,7 +366,7 @@ function showOverlay(type, msg) {
   if (type === 'error' && msg) el('error-msg').textContent = msg;
 }
 
-// ── Select option builders ─────────────────────────────────────────
+//  Select option builders 
 function nameOptions(selected = '') {
   return state.names.map(n =>
     `<option value="${esc(n)}" ${n === selected ? 'selected':''}>${esc(n)}</option>`
@@ -400,7 +400,7 @@ function researchOwnerOpts(selected = '') {
   return owners.map(n => `<option value="${esc(n)}" ${n === selected ? 'selected':''}>${esc(n)}</option>`).join('');
 }
 
-// ── View: Website Pages ─────────────────────────────────────────
+// View: Website Pages
 function renderMyWebsitePages() {
   const name = state.selectedName;
   const container = el('view-my-website-pages');
@@ -482,7 +482,7 @@ function renderMyWebsitePages() {
               ${sortTh('Editor', 'editor', wpSort)}
               ${sortTh('Department', 'department', wpSort)}
               ${sortTh('Last updated', 'updated', wpSort)}
-              <th class="col-audit-check">Links</th><th class="col-audit-check">A11y</th><th class="col-audit-check">Accuracy</th>
+              <th scope="col" class="col-audit-check">Links</th><th scope="col" class="col-audit-check">A11y</th><th scope="col" class="col-audit-check">Accuracy</th>
             </tr>
           </thead>
           <tbody id="wp-audit-tbody">${rowsHtml}</tbody>
@@ -600,9 +600,9 @@ function renderMyResearchGuides() {
             <tr>
               ${sortTh('Guide', 'guide', rgSort)}
               ${sortTh('Owner', 'owner', rgSort)}
-              <th class="col-count sort-th${rgSort.col === 'pages' ? ' sort-th-active' : ''}" data-sort="pages">Pages<span class="sort-indicator${rgSort.col === 'pages' ? ' sort-active' : ''}">${rgSort.col === 'pages' ? (rgSort.dir === 'asc' ? ' ▲' : ' ▼') : ' ▲'}</span></th>
+              <th scope="col" class="col-count sort-th${rgSort.col === 'pages' ? ' sort-th-active' : ''}" data-sort="pages">Pages<span class="sort-indicator${rgSort.col === 'pages' ? ' sort-active' : ''}">${rgSort.col === 'pages' ? (rgSort.dir === 'asc' ? ' ▲' : ' ▼') : ' ▲'}</span></th>
               ${sortTh('Last updated', 'updated', rgSort)}
-              <th class="col-audit-check">Links</th><th class="col-audit-check">A11y</th><th class="col-audit-check">Accuracy</th>
+              <th scope="col" class="col-audit-check">Links</th><th scope="col" class="col-audit-check">A11y</th><th scope="col" class="col-audit-check">Accuracy</th>
             </tr>
           </thead>
           <tbody id="rg-audit-tbody">${rowsHtml}</tbody>
@@ -638,7 +638,7 @@ function renderMyResearchGuides() {
 }
 
 
-// ── View: Reports ──────────────────────────────────────────────────
+// View: Reports
 const WEBSITE_REPORTS = [
   { id:'stale',        icon:'🕐', title:'Stale content',        desc:'Pages not updated recently. Good for identifying maintenance priorities.' },
   { id:'hidden',       icon:'🙈', title:'Hidden website pages',          desc:'Pages that are hidden. May be drafts or retired content worth reviewing.' },
