@@ -311,12 +311,7 @@ async function loadData(force = false) {
     }
   } catch { /* fall back to names derived from guide data */ }
 
-  // Load audit state — localStorage first (instant), then dataset is merged on top
-  try {
-    const local = localStorage.getItem('audit_cache');
-    if (local) state.audit = JSON.parse(local);
-  } catch { state.audit = {}; }
-
+  // Load audit state from datasetd
   try {
     const base = CONFIG.datasetBase;
     const keysRes = await fetch(`${base}/content-dashboard/api/audit.ds/keys`);
@@ -327,11 +322,9 @@ async function loadData(force = false) {
         const r = await fetch(`${base}/content-dashboard/api/audit.ds/object/${encodeURIComponent(key)}`);
         if (r.ok) fresh[key] = await r.json();
       }));
-      // datasetd wins so other people's changes come through; local fills in recent unsynced writes
-      state.audit = { ...state.audit, ...fresh };
-      localStorage.setItem('audit_cache', JSON.stringify(state.audit));
+      state.audit = fresh;
     }
-  } catch { /* datasetd unavailable — use local cache */ }
+  } catch { console.error('datasetd unavailable — audit data not loaded'); }
 
   if (!force) {
     const cached = sessionStorage.getItem(CONFIG.SESSION_KEY);
