@@ -2,6 +2,8 @@
   "tasks": {
     "check-setup": "deno run --allow-run --allow-read setup_check.ts",
     "gen-code": "deno run --allow-read --allow-write ./cmt.ts codemeta.json about.md CITATION.cff version.ts",
-	"content-dashboard-api": "datasetd content_dashboard.yaml"
+    "content-dashboard-api": "datasetd content_dashboard.yaml",
+    "proxy": "deno run --allow-net --allow-env --allow-read proxy/main.ts content_dashboard.yaml",
+    "proxy-dev": "DEV_USER=dev-user deno run --allow-net --allow-env --allow-read proxy/main.ts content_dashboard.yaml"
   }
 }
