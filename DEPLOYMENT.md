@@ -30,4 +30,10 @@ The application is designed to run as a systemd service on Ubuntu Server 24.04 L
 7. Run `make test`
 8. If tests pass then restart the systemd services otherwise debug issues
 
+## Notes
 
+- `htdocs/dev-config.js` is a development-only file (gitignored, see `htdocs/dev-config.js.example`
+  and SETUP.md). It is never created on the production machine. `htdocs/index.html` loads it with
+  an `onerror` fallback, so the browser falls back to relative paths
+  (`/content-dashboard/api/...`), which Apache routes to the proxy and datasetd per
+  `etc/content-dashboard.conf-example`.

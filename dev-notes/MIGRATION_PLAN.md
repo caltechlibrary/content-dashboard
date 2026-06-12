@@ -1213,40 +1213,48 @@ below.
 
 ### Configuration Files
 
-**Apache Configuration** (example):
+**Apache Configuration**:
 
-The following goes inside the existing `<VirtualHost *:443>` block for `apps.library.caltech.edu`. The system administrator will provide the final configuration; this is the pattern to follow.
+The canonical config snippet is `etc/content-dashboard.conf-example` in this repository. It goes inside the existing `<VirtualHost *:443>` block for `apps.library.caltech.edu`; the system administrator will provide the final configuration.
 
 ```apache
-# /etc/apache2/sites-available/apps.library.caltech.edu.conf
-# (Add inside the existing VirtualHost block)
+#<!-- content-dashboard -->
+ProxyPreserveHost On
 
 # Redirect bare path to trailing-slash form
-Redirect /content-dashboard /content-dashboard/
+Redirect "/content-dashboard" "/content-dashboard/"
 
-# LibGuides proxy — more specific path must come before the datasetd catch-all
-ProxyPass        "/content-dashboard/api/libguides/" "http://localhost:8080/api/libguides/" retry=0
-ProxyPassReverse "/content-dashboard/api/libguides/" "http://localhost:8080/api/libguides/"
+# --- content-dashboard-proxy (:8080) ---
+# proxy/routes.ts matches on the full request path, including the
+# /content-dashboard prefix, so it must be preserved (no path rewrite).
+ProxyPass        "/content-dashboard/api/config"     "http://localhost:8080/content-dashboard/api/config"     retry=0
+ProxyPassReverse "/content-dashboard/api/config"     "http://localhost:8080/content-dashboard/api/config"
+ProxyPass        "/content-dashboard/api/whoami"     "http://localhost:8080/content-dashboard/api/whoami"     retry=0
+ProxyPassReverse "/content-dashboard/api/whoami"     "http://localhost:8080/content-dashboard/api/whoami"
+ProxyPass        "/content-dashboard/api/health"     "http://localhost:8080/content-dashboard/api/health"     retry=0
+ProxyPassReverse "/content-dashboard/api/health"     "http://localhost:8080/content-dashboard/api/health"
+ProxyPass        "/content-dashboard/api/libguides/" "http://localhost:8080/content-dashboard/api/libguides/" retry=0
+ProxyPassReverse "/content-dashboard/api/libguides/" "http://localhost:8080/content-dashboard/api/libguides/"
 
-# Whoami endpoint (served by the same Deno backend proxy on port 8080)
-ProxyPass        "/content-dashboard/api/whoami" "http://localhost:8080/api/whoami" retry=0
-ProxyPassReverse "/content-dashboard/api/whoami" "http://localhost:8080/api/whoami"
-
-# datasetd — serves static files (htdocs/) and the dataset JSON API
+# --- content-dashboard-api / datasetd (:8200) ---
+# Serves htdocs/ static files and the dataset JSON API (stewardship, audit).
+# datasetd has no /content-dashboard prefix of its own, so it is stripped here.
+# Must come after the more specific ProxyPass rules above.
 ProxyPass        "/content-dashboard/" "http://localhost:8200/" retry=0
 ProxyPassReverse "/content-dashboard/" "http://localhost:8200/"
 
-# Shibboleth protection for the entire application
+#<!-- content-dashboard access control -->
 <Location /content-dashboard/>
-    AuthType shibboleth
-    ShibRequestSetting requireSession 1
-    require valid-user
-    # Forward authenticated user identity to backend services
-    RequestHeader set Remote-User "%{REMOTE_USER}e"
+  AuthType shibboleth
+  ShibRequestSetting requireSession 1
+  require valid-user
+  #require user rsdoiel@caltech.edu
+  RequestHeader set Remote-User "%{REMOTE_USER}e"
 </Location>
+#<!-- end content-dashboard -->
 ```
 
-> **Note**: `REMOTE_USER` is set by Apache from the Shibboleth-authenticated session and forwarded as the `Remote-User` header to the backend proxy. The Deno service reads this in `/api/whoami` to supply `updatedBy` data. No `ShibUseHeaders` directive is needed for this approach — it uses Apache's own `REMOTE_USER` env var, not raw Shibboleth attribute headers.
+> **Note**: `REMOTE_USER` is set by Apache from the Shibboleth-authenticated session and forwarded as the `Remote-User` header to the backend proxy. The Deno service reads this in `/content-dashboard/api/whoami` to supply `updatedBy` data. No `ShibUseHeaders` directive is needed for this approach — it uses Apache's own `REMOTE_USER` env var, not raw Shibboleth attribute headers.
 
 ### Service Management
 
@@ -1276,7 +1284,7 @@ WantedBy=multi-user.target
 
 **Systemd Service for the Content Dashboard Proxy**:
 
-The canonical unit file is `etc/systemd/content-dashboard-proxy.service` in this repository:
+The canonical unit file is `etc/content-dashboard-proxy.service` in this repository:
 
 ```ini
 # /etc/systemd/system/content-dashboard-proxy.service

@@ -172,7 +172,11 @@ jq -c 'to_entries[] | {key: .key, object: .value}' stewardship.json > stewardshi
 This file tells the browser where to find each service in development. It is
 **gitignored** and must never be committed.
 
-Create the file at `htdocs/dev-config.js`:
+Copy the checked-in template to create it:
+
+```shell
+cp htdocs/dev-config.js.example htdocs/dev-config.js
+```
 
 ```javascript
 // htdocs/dev-config.js — development only, gitignored

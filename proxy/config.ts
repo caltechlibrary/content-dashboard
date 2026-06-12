@@ -16,10 +16,15 @@ export interface LibGuidesConfig {
   client_secret: string;
 }
 
+export interface CacheConfig {
+  enabled: boolean;
+  ttl_seconds: number;
+}
+
 export interface ProxyConfig {
   port: number;
   libguides: LibGuidesConfig;
-  cache: { enabled: boolean; ttl_seconds: number };
+  cache: CacheConfig;
 }
 
 export interface AppConfig {
@@ -33,6 +38,13 @@ export async function loadConfig(path: string): Promise<AppConfig> {
   const lg = cfg.proxy.libguides;
   lg.client_id = expandEnv(lg.client_id);
   lg.client_secret = expandEnv(lg.client_secret);
+  if (!lg.client_id || !lg.client_secret) {
+    console.warn(
+      "warning: LIBGUIDES_CLIENT_ID/LIBGUIDES_CLIENT_SECRET are empty — " +
+        "/content-dashboard/api/libguides/* will return errors until .env is " +
+        "created (see DEPLOYMENT.md)",
+    );
+  }
   return cfg;
 }
 

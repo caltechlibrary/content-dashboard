@@ -69,6 +69,13 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
+/** Read NAME=value or export NAME=value from a .env-style file, trimming quotes. */
+function readEnvVar(text: string, name: string): string | null {
+  const m = text.match(new RegExp(`^\\s*(?:export\\s+)?${name}=(.*)$`, "m"));
+  if (!m) return null;
+  return m[1].trim().replace(/^["']|["']$/g, "");
+}
+
 // ── Collect results ────────────────────────────────────────────────
 const errors:   string[] = [];
 const warnings: string[] = [];
@@ -142,6 +149,24 @@ if (!await fileExists("htdocs/dev-config.js")) {
           "      apiBase:     'http://localhost:8080',\n" +
           "      datasetBase: 'http://localhost:8200',\n" +
           "    };");
+}
+
+// ── 5. .env (LibGuides credentials) ────────────────────────────────
+const REQUIRED_ENV = ["LIBGUIDES_CLIENT_ID", "LIBGUIDES_CLIENT_SECRET"];
+
+if (!await fileExists(".env")) {
+  warning(".env: not found\n" +
+          "  Required for LibGuides API access (LIBGUIDES_CLIENT_ID, LIBGUIDES_CLIENT_SECRET).\n" +
+          "  /content-dashboard/api/libguides/* will return errors until it exists.\n" +
+          "  See DEPLOYMENT.md.");
+} else {
+  const envText = await Deno.readTextFile(".env");
+  const missing = REQUIRED_ENV.filter((name) => !readEnvVar(envText, name));
+  if (missing.length > 0) {
+    warning(`.env: missing or empty ${missing.join(", ")}\n` +
+            "  /content-dashboard/api/libguides/* will return errors until set.\n" +
+            "  See DEPLOYMENT.md.");
+  }
 }
 
 // ── Report ─────────────────────────────────────────────────────────

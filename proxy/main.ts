@@ -6,5 +6,5 @@ const cfg = await loadConfig(configPath);
 const router = buildRouter(cfg);
 const port = cfg.proxy.port;
 
-console.log(`Proxy listening on :${port}`);
-Deno.serve({ port }, router);
+console.log(`Proxy listening on 127.0.0.1:${port}`);
+Deno.serve({ hostname: "127.0.0.1", port }, router);

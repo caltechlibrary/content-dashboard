@@ -17,6 +17,7 @@ compile-proxy: bin
 
 test:
 	deno check proxy/*.ts
+	deno test --allow-read --allow-write --allow-env proxy/
 
 website: clean-website .FORCE
 	make -f website.mak
