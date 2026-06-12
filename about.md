@@ -1,7 +1,7 @@
 ---
 title: content-dashboard
 abstract: |-
-  LibGuides has a highlevel view of ownserhsip where Caltech Library has specific people responsible for specific pages. This presents challenged when doing content audits or other reviews of our website content deployed through LibGuides. Taking a development at the edges approach, content-dashboard, provides for the user level responsibility for managing content in LibGuides.
+  LibGuides has a highlevel view of ownsership while Caltech Library has specific people responsible for specific pages. This presents challenged when doing content audits or other reviews of our website content deployed through LibGuides. Taking a development at the edges approach, content-dashboard, provides for the user level responsibility for managing content in LibGuides.
 authors:
   - family_name: Smith
     given_name: Twilia
@@ -13,7 +13,7 @@ contributor:
 
 
 repository_code: https://github.com/caltechlibrary/content-dashboard
-version: 0.0.0
+version: 0.0.1
 
 
 programming_language:
@@ -25,15 +25,15 @@ programming_language:
   - SQL
 
 
-
+date_released: 2026-06-12
 ---
 
 About this software
 ===================
 
-## content-dashboard 0.0.0
+## content-dashboard 0.0.1
 
-
+Initial working prototype for review. Contains a middle that proxies to datasetd back end as well as LibGuides API.
 
 ## Authors
 
@@ -47,7 +47,7 @@ About this software
 
 
 
-LibGuides has a highlevel view of ownserhsip where Caltech Library has specific people responsible for specific pages. This presents challenged when doing content audits or other reviews of our website content deployed through LibGuides. Taking a development at the edges approach, content-dashboard, provides for the user level responsibility for managing content in LibGuides.
+LibGuides has a highlevel view of ownsership while Caltech Library has specific people responsible for specific pages. This presents challenged when doing content audits or other reviews of our website content deployed through LibGuides. Taking a development at the edges approach, content-dashboard, provides for the user level responsibility for managing content in LibGuides.
 
 
 - [Code Repository](https://github.com/caltechlibrary/content-dashboard)
@@ -65,7 +65,16 @@ LibGuides has a highlevel view of ownserhsip where Caltech Library has specific 
 
 
 
+## Software Requirements
+
+- dataset >= 2.5.1
+- deno >= 2.8
 
 
+## Software Suggestions
+
+- CMTools >= 0.0.45b
+- Pandoc >= 3.9
+- GNU Make >= 3.8
 
 

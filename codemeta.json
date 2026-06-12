@@ -19,7 +19,9 @@
       "email": "rsdoiel@caltech.edu"
     }
   ],
-  "description": "LibGuides has a highlevel view of ownserhsip where Caltech Library has specific people responsible for specific pages. This presents challenged when doing content audits or other reviews of our website content deployed through LibGuides. Taking a development at the edges approach, content-dashboard, provides for the user level responsibility for managing content in LibGuides.",
+  "dateModified": "2026-06-12",
+  "datePublished": "2026-06-12",
+  "description": "LibGuides has a highlevel view of ownsership while Caltech Library has specific people responsible for specific pages. This presents challenged when doing content audits or other reviews of our website content deployed through LibGuides. Taking a development at the edges approach, content-dashboard, provides for the user level responsibility for managing content in LibGuides.",
   "funder": [
     {
       "name": "Caltech Library",
@@ -36,17 +38,18 @@
     "SQL"
   ],
   "softwareRequirements": [
-    "dataset >= 2.5.0",
-	"deno >= 2.8"
+    "dataset >= 2.5.1",
+    "deno >= 2.8"
   ],
   "softwareSuggestions": [
     "CMTools >= 0.0.45b",
     "Pandoc >= 3.9",
     "GNU Make >= 3.8"
   ],
-  "version": "0.0.0",
+  "version": "0.0.1",
   "developmentStatus": "active",
   "issueTracker": "https://github.com/caltechlibrary/content-dashboard/issues",
+  "releaseNotes": "Initial working prototype for review. Contains a middle that proxies to datasetd back end as well as LibGuides API.",
   "copyrightYear": 2026,
   "copyrightHolder": "California Institute of Technology"
 }
