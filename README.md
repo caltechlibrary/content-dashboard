@@ -32,7 +32,7 @@ LibGuides has a highlevel view of ownserhsip where Caltech Library has specific 
 
 See [SETUP.md](SETUP.md) for full configuration instructions, including:
 
-- How to configure `content_dashboard.yaml` for your environment
+- How to configure `content_dashboard.yaml` and `proxy_config.yaml` for your environment
 - Creating `htdocs/dev-config.js` for local development
 - Running datasetd and the Deno proxy
 - Apache reverse proxy rules for production

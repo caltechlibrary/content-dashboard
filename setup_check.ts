@@ -141,6 +141,13 @@ if (!await fileExists("content_dashboard.yaml")) {
         "  See SETUP.md for a full annotated example.");
 }
 
+// ── 3b. proxy_config.yaml ─────────────────────────────────────────
+if (!await fileExists("proxy_config.yaml")) {
+  error("proxy_config.yaml: not found\n" +
+        "  This file must exist in the directory where you run the Deno proxy.\n" +
+        "  See SETUP.md for a full annotated example.");
+}
+
 // ── 4. htdocs/dev-config.js (development only) ────────────────────
 if (!await fileExists("htdocs/dev-config.js")) {
   warning("htdocs/dev-config.js: not found (only needed for local development)\n" +

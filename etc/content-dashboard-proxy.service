@@ -6,7 +6,7 @@ ConditionPathExists=!/Sites/content-dashboard/content-dashboard-proxy_not_to_be_
 [Service]
 WorkingDirectory=/Sites/content-dashboard
 EnvironmentFile=/Sites/content-dashboard/.env
-ExecStart=/Sites/content-dashboard/bin/content-dashboard-proxy content_dashboard.yaml
+ExecStart=/Sites/content-dashboard/bin/content-dashboard-proxy proxy_config.yaml
 Type=simple
 Restart=always
 

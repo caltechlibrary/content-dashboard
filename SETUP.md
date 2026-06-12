@@ -47,9 +47,16 @@ and warnings (orange) with remediation hints. Exit code is 0 on success, 1 on er
 
 ---
 
-## Configuration file: content_dashboard.yaml
+## Configuration files: content_dashboard.yaml and proxy_config.yaml
 
-All service configuration lives in a single file at the repository root.
+Service configuration is split across two files at the repository root:
+
+- `content_dashboard.yaml` — read by `datasetd`. Its YAML decoder is strict
+  (unknown top-level keys are a fatal error), so this file may only contain
+  `host`, `htdocs`, `schemas`, and `collections`.
+- `proxy_config.yaml` — read by the Deno proxy. Holds `browser_config` and
+  `proxy` settings.
+
 Do not commit credentials — supply them via environment variables (see below).
 
 ### Top-level server settings
@@ -82,7 +89,8 @@ collections:
 ### browser_config
 
 These values are served to the browser at `GET /api/config` by the Deno proxy.
-They replace the old `htdocs/config.js` file.
+They replace the old `htdocs/config.js` file. They live in `proxy_config.yaml`,
+not `content_dashboard.yaml`.
 
 ```yaml
 browser_config:
@@ -114,7 +122,8 @@ browser_config:
 
 ### proxy
 
-Runtime configuration for the Deno backend proxy.
+Runtime configuration for the Deno backend proxy. This section also lives in
+`proxy_config.yaml`.
 
 ```yaml
 proxy:
@@ -186,9 +195,9 @@ window.__DEV_CONFIG__ = {
 };
 ```
 
-If both ports match the defaults in `content_dashboard.yaml` you do not need to
-change anything. If you changed `host:` or `proxy.port:` in the YAML, update the
-URLs here to match.
+If both ports match the defaults in `content_dashboard.yaml` and `proxy_config.yaml`
+you do not need to change anything. If you changed `host:` (in `content_dashboard.yaml`)
+or `proxy.port:` (in `proxy_config.yaml`), update the URLs here to match.
 
 In production this file is absent. The browser falls back to relative paths
 (`/content-dashboard/api/...`) which Apache routes to the correct service.
@@ -271,9 +280,9 @@ ProxyPassReverse "/content-dashboard/"  "http://localhost:8200/"
 | Service | Default port | Configuration key |
 |---------|-------------|-------------------|
 | datasetd | 8200 | `host:` in `content_dashboard.yaml` |
-| Deno proxy | 8080 | `proxy.port:` in `content_dashboard.yaml` |
+| Deno proxy | 8080 | `proxy.port:` in `proxy_config.yaml` |
 
-If you change either port, update **both** `content_dashboard.yaml` and the
+If you change either port, update the relevant YAML file and the
 Apache `ProxyPass` rules.
 
 ---
@@ -286,7 +295,7 @@ Once both services are running and Apache is configured:
 2. Authenticate via Shibboleth when prompted
 3. Open browser DevTools → Network tab
 4. Confirm `GET /content-dashboard/api/config` returns a JSON object with the
-   `browser_config` values from `content_dashboard.yaml`
+   `browser_config` values from `proxy_config.yaml`
 5. Confirm `GET /content-dashboard/api/whoami` returns `{ "user": "yourname@caltech.edu" }`
    (your Caltech email, not `"dev-user"`)
 6. Confirm the stewardship and audit views load data

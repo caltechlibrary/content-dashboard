@@ -172,33 +172,3 @@ collections:
            OR src->>'accessibility' = 0
            OR src->>'accuracy' = 0
 
-# Browser-facing configuration — served by the Deno proxy at GET /api/config.
-# Keys are snake_case; loadConfig() in app.js maps them to UPPER_CASE for
-# backwards compatibility with existing CONFIG references.
-browser_config:
-  stale_days: 365
-  very_stale_days: 730
-  session_key: "cs_guides_v1"
-  website_page_groups: [26856, 27077]
-  research_guide_groups: [10729]
-  departments:
-    - "Archives"
-    - "ACS"
-    - "CLOPS"
-    - "DLD"
-    - "LIT"
-    - "RS"
-
-# Deno backend proxy configuration.
-# Credentials must be supplied via environment variables — never hardcoded here.
-proxy:
-  port: 8080
-  libguides:
-    base_url: "https://lgapi-us.libapps.com/1.2"
-    token_url: "https://lgapi-us.libapps.com/1.2/oauth/token"
-    client_id: "${LIBGUIDES_CLIENT_ID}"
-    client_secret: "${LIBGUIDES_CLIENT_SECRET}"
-  cache:
-    enabled: true
-    ttl_seconds: 3600
-
