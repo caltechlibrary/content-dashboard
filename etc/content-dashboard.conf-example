@@ -1,0 +1,34 @@
+#<!-- content-dashboard -->
+ProxyPreserveHost On
+
+# Redirect bare path to trailing-slash form
+Redirect "/content-dashboard" "/content-dashboard/"
+
+# --- content-dashboard-proxy (:8080) ---
+# proxy/routes.ts matches on the full request path, including the
+# /content-dashboard prefix, so it must be preserved (no path rewrite).
+ProxyPass        "/content-dashboard/api/config"     "http://localhost:8080/content-dashboard/api/config"     retry=0
+ProxyPassReverse "/content-dashboard/api/config"     "http://localhost:8080/content-dashboard/api/config"
+ProxyPass        "/content-dashboard/api/whoami"     "http://localhost:8080/content-dashboard/api/whoami"     retry=0
+ProxyPassReverse "/content-dashboard/api/whoami"     "http://localhost:8080/content-dashboard/api/whoami"
+ProxyPass        "/content-dashboard/api/health"     "http://localhost:8080/content-dashboard/api/health"     retry=0
+ProxyPassReverse "/content-dashboard/api/health"     "http://localhost:8080/content-dashboard/api/health"
+ProxyPass        "/content-dashboard/api/libguides/" "http://localhost:8080/content-dashboard/api/libguides/" retry=0
+ProxyPassReverse "/content-dashboard/api/libguides/" "http://localhost:8080/content-dashboard/api/libguides/"
+
+# --- content-dashboard-api / datasetd (:8200) ---
+# Serves htdocs/ static files and the dataset JSON API (stewardship, audit).
+# datasetd has no /content-dashboard prefix of its own, so it is stripped here.
+# Must come after the more specific ProxyPass rules above.
+ProxyPass        "/content-dashboard/" "http://localhost:8200/" retry=0
+ProxyPassReverse "/content-dashboard/" "http://localhost:8200/"
+
+#<!-- content-dashboard access control -->
+<Location /content-dashboard/>
+  AuthType shibboleth
+  ShibRequestSetting requireSession 1
+  require valid-user
+  #require user rsdoiel@caltech.edu
+  RequestHeader set Remote-User "%{REMOTE_USER}e"
+</Location>
+#<!-- end content-dashboard -->

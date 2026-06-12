@@ -951,6 +951,13 @@ async function loadGuides(status = 1, expand = 'pages,pages.boxes,owner') {
 
 ## 🌐 BACKEND PROXY SERVICE (DENO+TYPESCRIPT)
 
+> **Status (2026-06-12)**: Implemented as `proxy/{main,config,routes,libguides}.ts`, structured
+> differently than the design sketch below — config is loaded from `content_dashboard.yaml`'s
+> `proxy:` section (see `proxy/config.ts`), not a separate `backend-config.yaml`. The
+> "Environment Variables", "Docker Configuration", and "Service Management" subsections have
+> been updated to match the actual implementation and deployment; the rest of this section is
+> historical design notes.
+
 ### Service Overview
 
 **Technology**: Deno + TypeScript  
@@ -1146,40 +1153,26 @@ await app.listen({ port: parseInt(PORT) });
 
 ### Environment Variables
 
+Only the LibGuides OAuth credentials are supplied via environment — `port`, `base_url`,
+`token_url`, and `cache` settings live in `content_dashboard.yaml`'s `proxy:` section (see
+`proxy/config.ts`).
+
 ```bash
-# Backend Proxy Service Environment
-PORT=8080
-LIBGUIDES_BASE_URL=https://lgapi-us.libapps.com/1.2
-LIBGUIDES_CLIENT_ID=your_client_id
-LIBGUIDES_CLIENT_SECRET=your_client_secret
-LIBGUIDES_TOKEN_URL=https://lgapi-us.libapps.com/1.2/oauth/token
+# .env (mode 600, gitignored)
+export LIBGUIDES_CLIENT_ID=your_client_id
+export LIBGUIDES_CLIENT_SECRET=your_client_secret
 ```
 
-### Docker Configuration (Optional)
+In development this is loaded via `deno run --env-file=.env` (the `proxy`/`proxy-dev` tasks
+in `deno.json`). In production it is loaded via systemd's `EnvironmentFile=` — see Service
+Management below. `DEV_USER` may also be set in development to control the `/api/whoami`
+response when no `Remote-User` header is present; it must not be set in production.
 
-**File**: `Dockerfile`
+### Docker Configuration
 
-```dockerfile
-# Backend Proxy Service Dockerfile
-FROM denoland/deno:1.40.0
-
-WORKDIR /app
-
-COPY . .
-
-# Copy backend files
-COPY backend/ ./backend/
-COPY htdocs/ ./htdocs/
-
-# Set permissions
-RUN chmod -R 755 /app
-
-# Expose ports
-EXPOSE 8080
-
-# Run the backend service
-CMD ["deno", "run", "--allow-net", "--allow-env", "--allow-read", "backend/main.ts"]
-```
+Not used. The proxy is compiled to a native binary with `deno compile` (`make compile-proxy`,
+output `bin/content-dashboard-proxy`) and run directly under systemd — see Service Management
+below.
 
 ---
 
@@ -1257,6 +1250,11 @@ ProxyPassReverse "/content-dashboard/" "http://localhost:8200/"
 
 ### Service Management
 
+Deployment follows the `/Sites/<repo>` convention used for other Caltech Library
+Deno+TypeScript services (see the `cold` project). The repository is cloned to
+`/Sites/content-dashboard`; the proxy is compiled to `bin/content-dashboard-proxy` via
+`make compile-proxy` (or `deno task compile-proxy`).
+
 **Systemd Service for datasetd**:
 
 ```ini
@@ -1268,48 +1266,42 @@ After=network.target
 
 [Service]
 Type=simple
-User=datasetd
-Group=datasetd
-WorkingDirectory=/opt/apps/content-dashboard
-ExecStart=/usr/local/bin/datasetd -c /opt/apps/content-dashboard/content_dashboard.yaml
-Restart=on-failure
-RestartSec=5
-
-# Environment
-Environment=DATASETD_CONFIG=/opt/apps/content-dashboard/content_dashboard.yaml
+WorkingDirectory=/Sites/content-dashboard
+ExecStart=/usr/local/bin/datasetd content_dashboard.yaml
+Restart=always
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-**Systemd Service for Backend Proxy**:
+**Systemd Service for the Content Dashboard Proxy**:
+
+The canonical unit file is `etc/systemd/content-dashboard-proxy.service` in this repository:
 
 ```ini
-# /etc/systemd/system/content-dashboard-backend.service
+# /etc/systemd/system/content-dashboard-proxy.service
 
 [Unit]
-Description=Content Dashboard Backend Proxy Service
+Description=Content Dashboard Proxy service
 After=network.target
+ConditionPathExists=!/Sites/content-dashboard/content-dashboard-proxy_not_to_be_run
 
 [Service]
+WorkingDirectory=/Sites/content-dashboard
+EnvironmentFile=/Sites/content-dashboard/.env
+ExecStart=/Sites/content-dashboard/bin/content-dashboard-proxy content_dashboard.yaml
 Type=simple
-User=content-dashboard
-Group=content-dashboard
-WorkingDirectory=/opt/apps/content-dashboard
-ExecStart=/usr/bin/deno run --allow-net --allow-env --allow-read /opt/apps/content-dashboard/backend/main.ts
-Restart=on-failure
-RestartSec=5
-
-# Environment variables
-Environment=PORT=8080
-Environment=LIBGUIDES_CLIENT_ID=your_client_id
-Environment=LIBGUIDES_CLIENT_SECRET=your_client_secret
-# DEV_USER is only used when REMOTE_USER header is absent (development mode)
-# In production this should not be set; the header comes from Apache/Shibboleth
+Restart=always
 
 [Install]
 WantedBy=multi-user.target
+Alias=content-dashboard-proxy.service
 ```
+
+`LIBGUIDES_CLIENT_ID`/`LIBGUIDES_CLIENT_SECRET` come from `/Sites/content-dashboard/.env`
+(mode 600, `export KEY=value` lines — systemd 246+, present on Ubuntu 24.04, strips the
+`export` prefix automatically). `DEV_USER` must not be set in production; `/api/whoami`
+falls back to the `Remote-User` header set by Apache/Shibboleth.
 
 ---
 

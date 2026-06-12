@@ -6,8 +6,17 @@ PROJECT = content-dashboard
 
 BRANCH = $(shell git branch | grep '* ' | cut -d  -f 2)
 
-build: README.md about.md search.md CITATION.cff
-	@echo "$(PROJECT) documentation build complete"
+build: README.md about.md search.md CITATION.cff compile-proxy
+	@echo "$(PROJECT) build complete"
+
+bin: .FORCE
+	mkdir -p bin
+
+compile-proxy: bin
+	deno task compile-proxy
+
+test:
+	deno check proxy/*.ts
 
 website: clean-website .FORCE
 	make -f website.mak
@@ -42,4 +51,4 @@ clean: clean-website
 
 .FORCE:
 
-.PHONY: build website status save clean-website clean
+.PHONY: build website status save clean-website clean compile-proxy test

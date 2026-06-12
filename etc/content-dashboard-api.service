@@ -1,0 +1,14 @@
+[Unit]
+Description=Content Dashboard datasetd API service
+After=network.target
+ConditionPathExists=!/Sites/content-dashboard/content-dashboard-api_not_to_be_run
+
+[Service]
+WorkingDirectory=/Sites/content-dashboard
+ExecStart=/usr/local/bin/datasetd content_dashboard.yaml
+Type=simple
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+Alias=content-dashboard-api.service
