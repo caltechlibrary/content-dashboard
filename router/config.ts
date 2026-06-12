@@ -21,30 +21,44 @@ export interface CacheConfig {
   ttl_seconds: number;
 }
 
-export interface ProxyConfig {
+export interface DatasetConfig {
+  base_url: string;
+}
+
+export interface RouterConfig {
   port: number;
   libguides: LibGuidesConfig;
   cache: CacheConfig;
+  dataset: DatasetConfig;
 }
 
 export interface AppConfig {
   browser_config: BrowserConfig;
-  proxy: ProxyConfig;
+  router: RouterConfig;
 }
+
+const DEFAULT_DATASET_BASE_URL = "http://localhost:8200";
 
 export async function loadConfig(path: string): Promise<AppConfig> {
   const raw = await Deno.readTextFile(path);
   const cfg = parse(raw) as AppConfig;
-  const lg = cfg.proxy.libguides;
+  const lg = cfg.router.libguides;
   lg.client_id = expandEnv(lg.client_id);
   lg.client_secret = expandEnv(lg.client_secret);
   if (!lg.client_id || !lg.client_secret) {
     console.warn(
       "warning: LIBGUIDES_CLIENT_ID/LIBGUIDES_CLIENT_SECRET are empty — " +
-        "/content-dashboard/api/libguides/* will return errors until .env is " +
-        "created (see DEPLOYMENT.md)",
+        "/lg/api/* will return errors until .env is created (see DEPLOYMENT.md)",
     );
   }
+
+  if (!cfg.router.dataset) {
+    cfg.router.dataset = { base_url: DEFAULT_DATASET_BASE_URL };
+  } else if (!cfg.router.dataset.base_url) {
+    cfg.router.dataset.base_url = DEFAULT_DATASET_BASE_URL;
+  }
+  cfg.router.dataset.base_url = expandEnv(cfg.router.dataset.base_url);
+
   return cfg;
 }
 

@@ -92,9 +92,6 @@
     </main>
   </div>
 
-  <!-- dev-config.js is gitignored; create it locally to set window.__DEV_CONFIG__
-       e.g. window.__DEV_CONFIG__ = { apiBase: 'http://localhost:8080', datasetBase: 'http://localhost:8200' }; -->
-  <script src="dev-config.js" onerror="window.__DEV_CONFIG__=window.__DEV_CONFIG__||{}"></script>
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

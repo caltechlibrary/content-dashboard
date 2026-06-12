@@ -1,11 +1,11 @@
 ##
-# proxy_config.yaml provides configuration for the Deno proxy used by
+# api_router.yaml provides configuration for the Deno API router used by
 # Caltech Library's Content Dashboard. This is kept separate from
 # content_dashboard.yaml because datasetd's strict YAML decoder rejects
 # any top-level keys it doesn't recognize.
 ##
 
-# Browser-facing configuration — served by the Deno proxy at GET /api/config.
+# Browser-facing configuration — served by the router at GET /api/config.
 # Keys are snake_case; loadConfig() in app.js maps them to UPPER_CASE for
 # backwards compatibility with existing CONFIG references.
 browser_config:
@@ -22,10 +22,11 @@ browser_config:
     - "LIT"
     - "RS"
 
-# Deno backend proxy configuration.
+# Deno API router configuration. Serves htdocs/, /api/* meta endpoints,
+# /lg/api/* (proxied LibGuides), and /ds/api/* (proxied to datasetd).
 # Credentials must be supplied via environment variables — never hardcoded here.
-proxy:
-  port: 8080
+router:
+  port: 8201
   libguides:
     base_url: "https://lgapi-us.libapps.com/1.2"
     token_url: "https://lgapi-us.libapps.com/1.2/oauth/token"
@@ -34,3 +35,5 @@ proxy:
   cache:
     enabled: true
     ttl_seconds: 3600
+  dataset:
+    base_url: "http://localhost:8200"

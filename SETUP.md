@@ -5,21 +5,22 @@ repository is already cloned and that the required software (listed below) is in
 
 ## Architecture summary
 
-Three services run in production, all behind a single Apache virtual host with Shibboleth
-authentication:
+Two services run in production, behind a single Apache virtual host with Shibboleth
+authentication. The router is the only browser-facing service; datasetd is internal-only:
 
 ```
 Browser → Apache + Shibboleth (apps.library.caltech.edu)
               │
-              ├─ /content-dashboard/api/libguides/  →  Deno proxy  :8080
-              ├─ /content-dashboard/api/whoami       →  Deno proxy  :8080
-              ├─ /content-dashboard/api/config       →  Deno proxy  :8080
-              └─ /content-dashboard/                 →  datasetd    :8200
-                                                         (static files + dataset JSON API)
+              └─ /content-dashboard/  →  router  :8201
+                                          ├─ /api/{config,whoami,health}  (native)
+                                          ├─ /lg/api/*  →  LibGuides API (proxied)
+                                          ├─ /ds/api/*  →  datasetd :8200 (proxied, internal-only)
+                                          └─ everything else → htdocs/ static files
 ```
 
 In development, Apache and Shibboleth are not involved. The browser speaks directly to
-datasetd and the Deno proxy on different ports.
+the router on `http://localhost:8201/`, which still proxies `/ds/api/*` to datasetd on
+`http://localhost:8200/`.
 
 ---
 
@@ -40,34 +41,36 @@ and warnings (orange) with remediation hints. Exit code is 0 on success, 1 on er
 
 | Software | Minimum version | Purpose |
 |----------|----------------|---------|
-| `datasetd` | 2.4.1 | Data service and static file server |
+| `datasetd` | 2.4.1 | Data service (internal, JSON API only) |
 | `dataset` | 2.4.1 | CLI for initialising and loading collections |
-| Deno | 2.8 | Runs the backend proxy service |
+| Deno | 2.8 | Runs the router service |
 | SQLite | 3.38 | Storage engine used by datasetd (`->>` operator required) |
 
 ---
 
-## Configuration files: content_dashboard.yaml and proxy_config.yaml
+## Configuration files: content_dashboard.yaml and api_router.yaml
 
 Service configuration is split across two files at the repository root:
 
 - `content_dashboard.yaml` — read by `datasetd`. Its YAML decoder is strict
   (unknown top-level keys are a fatal error), so this file may only contain
   `host`, `htdocs`, `schemas`, and `collections`.
-- `proxy_config.yaml` — read by the Deno proxy. Holds `browser_config` and
-  `proxy` settings.
+- `api_router.yaml` — read by the router. Holds `browser_config` and
+  `router` settings (including the `dataset.base_url` used to reach datasetd).
 
 Do not commit credentials — supply them via environment variables (see below).
 
 ### Top-level server settings
 
 ```yaml
-host: localhost:8200   # Address datasetd listens on.
-                       # Change the port if 8200 is taken on your machine.
-                       # In production this stays on localhost; Apache proxies it.
+host: localhost:8200   # Address datasetd listens on. Internal-only; not
+                       # exposed to the browser or Apache.
+                       # Change the port if 8200 is taken on your machine,
+                       # and update router.dataset.base_url to match.
 
 htdocs: htdocs         # Path to the browser-served directory, relative to this file.
-                       # Leave as-is unless you move the htdocs/ directory.
+                       # Unused now that the router serves htdocs/ directly,
+                       # but left as-is for compatibility.
 ```
 
 ### schemas and collections
@@ -88,8 +91,8 @@ collections:
 
 ### browser_config
 
-These values are served to the browser at `GET /api/config` by the Deno proxy.
-They replace the old `htdocs/config.js` file. They live in `proxy_config.yaml`,
+These values are served to the browser at `GET /api/config` by the router.
+They replace the old `htdocs/config.js` file. They live in `api_router.yaml`,
 not `content_dashboard.yaml`.
 
 ```yaml
@@ -120,15 +123,18 @@ browser_config:
 - `website_page_groups` / `research_guide_groups` — update if LibGuides group IDs change.
 - `departments` — add or remove departments as the organisation changes.
 
-### proxy
+### router
 
-Runtime configuration for the Deno backend proxy. This section also lives in
-`proxy_config.yaml`.
+Runtime configuration for the Deno router. This section also lives in
+`api_router.yaml`.
 
 ```yaml
-proxy:
-  port: 8080               # Port the Deno proxy listens on.
-                           # Change if 8080 is taken. Must match Apache ProxyPass rules.
+router:
+  port: 8201               # Port the router listens on.
+                           # Change if 8201 is taken. Must match the Apache ProxyPass rule.
+  dataset:
+    base_url: "http://localhost:8200"  # Where datasetd listens. The router
+                                        # proxies /ds/api/* here.
   libguides:
     base_url: "https://lgapi-us.libapps.com/1.2"
     token_url: "https://lgapi-us.libapps.com/1.2/oauth/token"
@@ -136,7 +142,7 @@ proxy:
     client_secret: "${LIBGUIDES_CLIENT_SECRET}"
   cache:
     enabled: true
-    ttl_seconds: 3600      # How long the proxy caches LibGuides API responses (seconds).
+    ttl_seconds: 3600      # How long the router caches LibGuides API responses (seconds).
 ```
 
 ---
@@ -176,59 +182,50 @@ To regenerate `stewardship.jsonl` from `stewardship.json`:
 jq -c 'to_entries[] | {key: .key, object: .value}' stewardship.json > stewardship.jsonl
 ```
 
-### 3. Create htdocs/dev-config.js
-
-This file tells the browser where to find each service in development. It is
-**gitignored** and must never be committed.
-
-Copy the checked-in template to create it:
-
-```shell
-cp htdocs/dev-config.js.example htdocs/dev-config.js
-```
-
-```javascript
-// htdocs/dev-config.js — development only, gitignored
-window.__DEV_CONFIG__ = {
-  apiBase:     'http://localhost:8080',  // Deno proxy (LibGuides, whoami, config)
-  datasetBase: 'http://localhost:8200',  // datasetd (stewardship, audit CRUD)
-};
-```
-
-If both ports match the defaults in `content_dashboard.yaml` and `proxy_config.yaml`
-you do not need to change anything. If you changed `host:` (in `content_dashboard.yaml`)
-or `proxy.port:` (in `proxy_config.yaml`), update the URLs here to match.
-
-In production this file is absent. The browser falls back to relative paths
-(`/content-dashboard/api/...`) which Apache routes to the correct service.
-
-### 4. Start datasetd
+### 3. Start datasetd
 
 ```shell
 datasetd content_dashboard.yaml
 ```
 
-datasetd will serve static files from `htdocs/` at `http://localhost:8200/` and
-expose the dataset JSON API at `http://localhost:8200/api/`.
+datasetd listens on `http://localhost:8200/` and exposes the dataset JSON API at
+`http://localhost:8200/api/`. It is internal-only — the router proxies to it.
 
-### 5. Start the Deno proxy
+### 4. Start the router
 
 ```shell
 # With real LibGuides credentials:
-LIBGUIDES_CLIENT_ID=your_id LIBGUIDES_CLIENT_SECRET=your_secret deno task proxy
+LIBGUIDES_CLIENT_ID=your_id LIBGUIDES_CLIENT_SECRET=your_secret deno task router
 
 # Without credentials (LibGuides calls will fail, but stewardship/audit work):
-DEV_USER=yourname@caltech.edu deno task proxy-dev
+deno task router-dev
 ```
 
-### 6. Open the application
+`router-dev` sets `DEV_USER=dev-user` so `/api/whoami` returns a usable identity
+without Shibboleth. To use your own identity instead:
+
+```shell
+DEV_USER=yourname@caltech.edu deno run --allow-net --allow-env --allow-read --env-file=.env router/main.ts api_router.yaml
+```
+
+### 5. Open the application
 
 ```
-http://localhost:8200/
+http://localhost:8201/
 ```
 
-The browser loads `htdocs/dev-config.js`, which points API calls to the correct
-services at `:8200` and `:8080`.
+The router serves `htdocs/` directly and handles `/api/*`, `/lg/api/*`, and
+`/ds/api/*` (proxied to datasetd on `:8200`).
+
+### Building the browser client modules
+
+`htdocs/modules/lg-client.js` and `htdocs/modules/ds-client.js` are compiled from
+`lg-client.ts` and `ds-client.ts` and are checked into the repository. If you change
+either `.ts` source file, rebuild them with:
+
+```shell
+deno task htdocs
+```
 
 ---
 
@@ -246,31 +243,27 @@ headers are absent.
 ### Apache reverse proxy rules
 
 Add the following inside the existing `<VirtualHost *:443>` block for
-`apps.library.caltech.edu`. More specific paths must appear before the general
-datasetd catch-all:
+`apps.library.caltech.edu`. See `etc/content-dashboard.conf-example` for the
+full, current example:
 
 ```apache
+ProxyPreserveHost On
+
 # Redirect bare path to trailing-slash form
-Redirect /content-dashboard /content-dashboard/
+Redirect "/content-dashboard" "/content-dashboard/"
 
-# Deno proxy — LibGuides passthrough and identity endpoints
-ProxyPass        "/content-dashboard/api/libguides/" "http://localhost:8080/api/libguides/" retry=0
-ProxyPassReverse "/content-dashboard/api/libguides/" "http://localhost:8080/api/libguides/"
-ProxyPass        "/content-dashboard/api/whoami"     "http://localhost:8080/api/whoami"     retry=0
-ProxyPassReverse "/content-dashboard/api/whoami"     "http://localhost:8080/api/whoami"
-ProxyPass        "/content-dashboard/api/config"     "http://localhost:8080/api/config"     retry=0
-ProxyPassReverse "/content-dashboard/api/config"     "http://localhost:8080/api/config"
+# --- content-dashboard-router (:8201) ---
+# Serves htdocs/ static files, /api/* (config, whoami, health),
+# /lg/api/* (proxied LibGuides), and /ds/api/* (proxied to datasetd :8200,
+# internal-only).
+ProxyPass        "/content-dashboard/" "http://localhost:8201/" retry=0
+ProxyPassReverse "/content-dashboard/" "http://localhost:8201/"
 
-# datasetd — static files and dataset JSON API
-ProxyPass        "/content-dashboard/"  "http://localhost:8200/" retry=0
-ProxyPassReverse "/content-dashboard/"  "http://localhost:8200/"
-
-# Shibboleth protection for the entire application
 <Location /content-dashboard/>
     AuthType shibboleth
     ShibRequestSetting requireSession 1
     require valid-user
-    # Forward authenticated identity to the Deno proxy for updatedBy tracking
+    # Forward authenticated identity to the router for updatedBy tracking
     RequestHeader set Remote-User "%{REMOTE_USER}e"
 </Location>
 ```
@@ -279,11 +272,12 @@ ProxyPassReverse "/content-dashboard/"  "http://localhost:8200/"
 
 | Service | Default port | Configuration key |
 |---------|-------------|-------------------|
-| datasetd | 8200 | `host:` in `content_dashboard.yaml` |
-| Deno proxy | 8080 | `proxy.port:` in `proxy_config.yaml` |
+| router | 8201 | `router.port:` in `api_router.yaml` |
+| datasetd | 8200 | `host:` in `content_dashboard.yaml`, `router.dataset.base_url:` in `api_router.yaml` |
 
-If you change either port, update the relevant YAML file and the
-Apache `ProxyPass` rules.
+datasetd is internal-only; only the router's port needs an Apache `ProxyPass` rule.
+If you change either port, update the relevant YAML file(s) and, for the router's
+port, the Apache `ProxyPass` rule.
 
 ---
 
@@ -295,10 +289,12 @@ Once both services are running and Apache is configured:
 2. Authenticate via Shibboleth when prompted
 3. Open browser DevTools → Network tab
 4. Confirm `GET /content-dashboard/api/config` returns a JSON object with the
-   `browser_config` values from `proxy_config.yaml`
+   `browser_config` values from `api_router.yaml`
 5. Confirm `GET /content-dashboard/api/whoami` returns `{ "user": "yourname@caltech.edu" }`
    (your Caltech email, not `"dev-user"`)
-6. Confirm the stewardship and audit views load data
+6. Confirm the stewardship and audit views load data (via `/ds/api/...`, proxied
+   to datasetd)
+7. Confirm the Website Pages and Research Guides views populate (via `/lg/api/guides`)
 
 If `whoami` returns `"dev-user"` in production, check that the `RequestHeader set
 Remote-User` directive is inside the `<Location>` block and that Shibboleth is

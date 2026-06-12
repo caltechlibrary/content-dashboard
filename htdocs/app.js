@@ -1,15 +1,12 @@
+import { getAccounts, getGuides } from './modules/lg-client.js';
+import { getAllObjects, putObject } from './modules/ds-client.js';
+
 // Configuration
-// Populated at startup by loadConfig() via GET /api/config from the proxy.
-// In development, create htdocs/dev-config.js (gitignored) to set:
-//   window.__DEV_CONFIG__ = { apiBase: 'http://localhost:8080', datasetBase: 'http://localhost:8200' };
+// Populated at startup by loadConfig() via GET api/config from the router.
 let CONFIG = {};
 
 async function loadConfig() {
-  const dev = window.__DEV_CONFIG__ || {};
-  const apiBase      = dev.apiBase      ?? '';
-  const datasetBase  = dev.datasetBase  ?? '';
-
-  const res = await fetch(`${apiBase}/content-dashboard/api/config`);
+  const res = await fetch('api/config');
   if (!res.ok) throw new Error(`Config fetch failed: ${res.status}`);
   const remote = await res.json();
 
@@ -20,15 +17,13 @@ async function loadConfig() {
     WEBSITE_PAGE_GROUPS:   remote.website_page_groups,
     RESEARCH_GUIDE_GROUPS: remote.research_guide_groups,
     DEPARTMENTS:           remote.departments,
-    apiBase,
-    datasetBase,
     currentUser: 'unknown',
   };
 }
 
 async function loadCurrentUser() {
   try {
-    const res = await fetch(`${CONFIG.apiBase}/content-dashboard/api/whoami`);
+    const res = await fetch('api/whoami');
     if (res.ok) {
       const data = await res.json();
       CONFIG.currentUser = data.user || 'unknown';
@@ -183,11 +178,7 @@ async function clearAuditField(field, tbodyId) {
   await Promise.all(keysToUpdate.map(key => {
     const [type, ...rest] = key.split(':');
     const id = rest.join(':');
-    return fetch(`${CONFIG.datasetBase}/content-dashboard/api/audit.ds/object/${encodeURIComponent(key)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, id, ...state.audit[key], updatedBy: CONFIG.currentUser }),
-    });
+    return putObject('audit.ds', key, { type, id, ...state.audit[key], updatedBy: CONFIG.currentUser });
   }));
 }
 
@@ -197,11 +188,7 @@ async function saveAuditCheck(key, field, checked) {
   state.audit[key] = current;
   const [type, ...rest] = key.split(':');
   const id = rest.join(':');
-  await fetch(`${CONFIG.datasetBase}/content-dashboard/api/audit.ds/object/${encodeURIComponent(key)}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type, id, ...current, updatedBy: CONFIG.currentUser }),
-  });
+  await putObject('audit.ds', key, { type, id, ...current, updatedBy: CONFIG.currentUser });
 }
 
 function expertCell(name) {
@@ -267,49 +254,26 @@ function processGuides(guides) {
 async function loadData(force = false) {
   // Load stewardship from datasetd
   try {
-    const base = CONFIG.datasetBase;
-    const keysRes = await fetch(`${base}/content-dashboard/api/stewardship.ds/keys`);
-    if (keysRes.ok) {
-      const keys = await keysRes.json();
-      const result = {};
-      await Promise.all(keys.map(async key => {
-        const r = await fetch(`${base}/content-dashboard/api/stewardship.ds/object/${encodeURIComponent(key)}`);
-        if (r.ok) result[key] = await r.json();
-      }));
-      state.stewardship = result;
-    }
+    state.stewardship = await getAllObjects('stewardship.ds');
   } catch { console.error('datasetd unavailable — stewardship data not loaded'); }
 
-  // Fetch staff accounts for name lists (proxy strips PII, only id/first_name/last_name returned)
+  // Fetch staff accounts for name lists (router strips PII, only id/first_name/last_name returned)
   try {
-    const ar = await fetch(`${CONFIG.apiBase}/content-dashboard/api/libguides/accounts`);
-    if (ar.ok) {
-      const accounts = await ar.json();
-      state.names = accounts
-        .filter(a => {
-          if (!a.first_name && !a.last_name) return false;
-          if ((a.last_name || '').includes('(test)')) return false;
-          return true;
-        })
-        .map(a => `${a.first_name} ${a.last_name}`.trim())
-        .filter(Boolean)
-        .sort((a,b) => a.localeCompare(b));
-    }
+    const accounts = await getAccounts();
+    state.names = accounts
+      .filter(a => {
+        if (!a.first_name && !a.last_name) return false;
+        if ((a.last_name || '').includes('(test)')) return false;
+        return true;
+      })
+      .map(a => `${a.first_name} ${a.last_name}`.trim())
+      .filter(Boolean)
+      .sort((a,b) => a.localeCompare(b));
   } catch { /* fall back to names derived from guide data */ }
 
   // Load audit state from datasetd
   try {
-    const base = CONFIG.datasetBase;
-    const keysRes = await fetch(`${base}/content-dashboard/api/audit.ds/keys`);
-    if (keysRes.ok) {
-      const keys = await keysRes.json();
-      const fresh = {};
-      await Promise.all(keys.map(async key => {
-        const r = await fetch(`${base}/content-dashboard/api/audit.ds/object/${encodeURIComponent(key)}`);
-        if (r.ok) fresh[key] = await r.json();
-      }));
-      state.audit = fresh;
-    }
+    state.audit = await getAllObjects('audit.ds');
   } catch { console.error('datasetd unavailable — audit data not loaded'); }
 
   if (!force) {
@@ -327,9 +291,7 @@ async function loadData(force = false) {
 
   showOverlay('loading');
   try {
-    const res = await fetch(`${CONFIG.apiBase}/content-dashboard/api/libguides/guides?status=1&expand=pages,owner`);
-    if (!res.ok) throw new Error(`Guides API: HTTP ${res.status}`);
-    const guides = await res.json();
+    const guides = await getGuides({ status: 1, expand: 'pages,owner' });
     const ts = Date.now();
     sessionStorage.setItem(CONFIG.SESSION_KEY, JSON.stringify({ data: guides, ts }));
     processGuides(guides);
@@ -996,9 +958,7 @@ async function runUnpublishedReport() {
 
   let guides;
   try {
-    const res = await fetch(`${CONFIG.apiBase}/content-dashboard/api/libguides/guides?status=0&expand=pages,owner`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    guides = await res.json();
+    guides = await getGuides({ status: 0, expand: 'pages,owner' });
   } catch (err) {
     resultsEl.innerHTML = `<div class="empty-state">Failed to load: ${esc(err.message)}</div>`;
     btn.textContent = 'Run report';
@@ -1079,9 +1039,7 @@ async function runRgUnpublishedReport() {
 
   let guides;
   try {
-    const res = await fetch(`${CONFIG.apiBase}/content-dashboard/api/libguides/guides?status=0&expand=pages,owner`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    guides = await res.json();
+    guides = await getGuides({ status: 0, expand: 'pages,owner' });
   } catch (err) {
     resultsEl.innerHTML = `<div class="empty-state">Failed to load: ${esc(err.message)}</div>`;
     btn.textContent = 'Run report';
@@ -1279,11 +1237,7 @@ function renderManageStewards() {
     }
 
     const entry = state.stewardship[pageId];
-    fetch(`${CONFIG.datasetBase}/content-dashboard/api/stewardship.ds/object/${encodeURIComponent(pageId)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pageId, expert: entry.expert || '', editor: entry.editor || '', department: entry.department || '', updatedBy: CONFIG.currentUser }),
-    });
+    putObject('stewardship.ds', pageId, { pageId, expert: entry.expert || '', editor: entry.editor || '', department: entry.department || '', updatedBy: CONFIG.currentUser });
   });
 }
 

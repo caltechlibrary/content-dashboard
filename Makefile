@@ -6,18 +6,21 @@ PROJECT = content-dashboard
 
 BRANCH = $(shell git branch | grep '* ' | cut -d  -f 2)
 
-build: README.md about.md search.md CITATION.cff compile-proxy
+build: README.md about.md search.md CITATION.cff htdocs compile-router
 	@echo "$(PROJECT) build complete"
 
 bin: .FORCE
 	mkdir -p bin
 
-compile-proxy: bin
-	deno task compile-proxy
+compile-router: bin
+	deno task compile-router
+
+htdocs: .FORCE
+	deno task htdocs
 
 test:
-	deno check proxy/*.ts
-	deno test --allow-read --allow-write --allow-env proxy/
+	deno check router/*.ts lg-client.ts ds-client.ts
+	deno test --allow-read --allow-write --allow-env router/
 
 website: clean-website .FORCE
 	make -f website.mak
@@ -52,4 +55,4 @@ clean: clean-website
 
 .FORCE:
 
-.PHONY: build website status save clean-website clean compile-proxy test
+.PHONY: build website status save clean-website clean compile-router htdocs test

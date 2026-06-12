@@ -1,34 +1,43 @@
+import { serveDir } from "jsr:@std/http/file-server";
 import { AppConfig } from "./config.ts";
 import { makeLibGuides } from "./libguides.ts";
+import { makeDatasetProxy } from "./dataset.ts";
+
+const HTDOCS_ROOT = new URL("../htdocs", import.meta.url).pathname;
 
 export function buildRouter(cfg: AppConfig) {
-  const lg = makeLibGuides(cfg.proxy.libguides, cfg.proxy.cache);
+  const lg = makeLibGuides(cfg.router.libguides, cfg.router.cache);
+  const dsProxy = makeDatasetProxy(cfg.router.dataset.base_url);
 
   return async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
     const p = url.pathname;
 
-    if (p === "/content-dashboard/api/config") {
+    if (p === "/api/config") {
       return Response.json(cfg.browser_config);
     }
 
-    if (p === "/content-dashboard/api/whoami") {
+    if (p === "/api/whoami") {
       return handleWhoami(req);
     }
 
-    if (p === "/content-dashboard/api/health") {
+    if (p === "/api/health") {
       return Response.json({ status: "ok", timestamp: new Date().toISOString() });
     }
 
-    if (p === "/content-dashboard/api/libguides/accounts") {
+    if (p === "/lg/api/accounts") {
       return lg.handleAccounts();
     }
 
-    if (p === "/content-dashboard/api/libguides/guides") {
+    if (p === "/lg/api/guides") {
       return lg.handleGuides(url.searchParams);
     }
 
-    return new Response("Not found", { status: 404 });
+    if (p === "/ds" || p.startsWith("/ds/")) {
+      return dsProxy(req, p);
+    }
+
+    return serveDir(req, { fsRoot: HTDOCS_ROOT, quiet: true });
   };
 }
 

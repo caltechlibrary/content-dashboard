@@ -3,8 +3,11 @@
     "check-setup": "deno run --allow-run --allow-read setup_check.ts",
     "gen-code": "deno run --allow-read --allow-write ./cmt.ts codemeta.json about.md CITATION.cff version.ts",
     "content-dashboard-api": "datasetd content_dashboard.yaml",
-    "proxy": "deno run --allow-net --allow-env --allow-read --env-file=.env proxy/main.ts proxy_config.yaml",
-    "proxy-dev": "DEV_USER=dev-user deno run --allow-net --allow-env --allow-read --env-file=.env proxy/main.ts proxy_config.yaml",
-    "compile-proxy": "deno compile --allow-net --allow-env --allow-read --output bin/content-dashboard-proxy proxy/main.ts"
+    "router": "deno run --allow-net --allow-env --allow-read --env-file=.env router/main.ts api_router.yaml",
+    "router-dev": "DEV_USER=dev-user deno run --allow-net --allow-env --allow-read --env-file=.env router/main.ts api_router.yaml",
+    "compile-router": "deno compile --allow-net --allow-env --allow-read --output bin/content-dashboard-router router/main.ts",
+    "lg-client.ts": "deno bundle --inline-imports=true lg-client.ts --outdir htdocs/modules/",
+    "ds-client.ts": "deno bundle --inline-imports=true ds-client.ts --outdir htdocs/modules/",
+    "htdocs": "deno task lg-client.ts && deno task ds-client.ts"
   }
 }

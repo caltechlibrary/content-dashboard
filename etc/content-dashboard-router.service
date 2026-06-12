@@ -1,0 +1,15 @@
+[Unit]
+Description=Content Dashboard Router service
+After=network.target
+ConditionPathExists=!/Sites/content-dashboard/content-dashboard-router_not_to_be_run
+
+[Service]
+WorkingDirectory=/Sites/content-dashboard
+EnvironmentFile=/Sites/content-dashboard/.env
+ExecStart=/Sites/content-dashboard/bin/content-dashboard-router api_router.yaml
+Type=simple
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+Alias=content-dashboard-router.service

@@ -19,7 +19,7 @@ LibGuides has a highlevel view of ownserhsip where Caltech Library has specific 
 ## Software Requirements
 
 - dataset >= 2.4.1 (provides `datasetd` and `dataset` CLI)
-- Deno >= 2.8 (runs the backend proxy service)
+- Deno >= 2.8 (runs the router service)
 - SQLite >= 3.38 (used by datasetd; the `->>` operator is required)
 
 ### Software Suggestions
@@ -32,9 +32,8 @@ LibGuides has a highlevel view of ownserhsip where Caltech Library has specific 
 
 See [SETUP.md](SETUP.md) for full configuration instructions, including:
 
-- How to configure `content_dashboard.yaml` and `proxy_config.yaml` for your environment
-- Creating `htdocs/dev-config.js` for local development
-- Running datasetd and the Deno proxy
+- How to configure `content_dashboard.yaml` and `api_router.yaml` for your environment
+- Running datasetd and the router
 - Apache reverse proxy rules for production
 
 ## Related resources

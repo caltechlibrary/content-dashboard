@@ -2,9 +2,8 @@
 /**
  * setup_check.ts — sanity-checks the content-dashboard environment.
  *
- * Verifies that required tools are installed at suitable versions, that
- * content_dashboard.yaml is present, and that htdocs/dev-config.js exists
- * for local development.
+ * Verifies that required tools are installed at suitable versions and that
+ * content_dashboard.yaml and api_router.yaml are present.
  *
  * Usage:
  *   deno task check-setup
@@ -102,7 +101,7 @@ for (const bin of ["dataset", "datasetd"]) {
   }
 }
 
-// ── 2. Deno or compiled proxy binary ──────────────────────────────
+// ── 2. Deno or compiled router binary ─────────────────────────────
 const DENO_MIN: SemVer = [2, 8, 0];
 
 const denoOut = await runCmd("deno", "--version");
@@ -113,24 +112,24 @@ if (denoOut !== null) {
   if (v && meetsMin(v, DENO_MIN)) {
     denoVersionOk = true;
   } else if (v) {
-    warning(`deno: found ${fmt(v)}, need >= ${fmt(DENO_MIN)} to run the proxy via deno task\n` +
-            `  Checking for a compiled proxy in bin/ as fallback…`);
+    warning(`deno: found ${fmt(v)}, need >= ${fmt(DENO_MIN)} to run the router via deno task\n` +
+            `  Checking for a compiled router in bin/ as fallback…`);
   }
 }
 
 if (!denoVersionOk) {
-  const proxyBin = await fileExists("bin/proxy");
-  if (proxyBin) {
+  const routerBin = await fileExists("bin/content-dashboard-router");
+  if (routerBin) {
     warning(denoOut === null
-      ? "deno: not found — using compiled proxy at bin/proxy"
-      : "deno: version too old — using compiled proxy at bin/proxy");
+      ? "deno: not found — using compiled router at bin/content-dashboard-router"
+      : "deno: version too old — using compiled router at bin/content-dashboard-router");
   } else {
     error((denoOut === null
-      ? `deno: not found and no compiled proxy at bin/proxy`
-      : `deno: version too old and no compiled proxy at bin/proxy`) +
+      ? `deno: not found and no compiled router at bin/content-dashboard-router`
+      : `deno: version too old and no compiled router at bin/content-dashboard-router`) +
       `\n  Install Deno >= ${fmt(DENO_MIN)} from https://deno.com\n` +
-      `  or compile the proxy:\n` +
-      `    deno compile --output bin/proxy --allow-net --allow-env --allow-read proxy/main.ts`);
+      `  or compile the router:\n` +
+      `    deno compile --output bin/content-dashboard-router --allow-net --allow-env --allow-read router/main.ts`);
   }
 }
 
@@ -141,37 +140,27 @@ if (!await fileExists("content_dashboard.yaml")) {
         "  See SETUP.md for a full annotated example.");
 }
 
-// ── 3b. proxy_config.yaml ─────────────────────────────────────────
-if (!await fileExists("proxy_config.yaml")) {
-  error("proxy_config.yaml: not found\n" +
-        "  This file must exist in the directory where you run the Deno proxy.\n" +
+// ── 3b. api_router.yaml ────────────────────────────────────────────
+if (!await fileExists("api_router.yaml")) {
+  error("api_router.yaml: not found\n" +
+        "  This file must exist in the directory where you run the router.\n" +
         "  See SETUP.md for a full annotated example.");
 }
 
-// ── 4. htdocs/dev-config.js (development only) ────────────────────
-if (!await fileExists("htdocs/dev-config.js")) {
-  warning("htdocs/dev-config.js: not found (only needed for local development)\n" +
-          "  Create htdocs/dev-config.js with:\n" +
-          "    window.__DEV_CONFIG__ = {\n" +
-          "      apiBase:     'http://localhost:8080',\n" +
-          "      datasetBase: 'http://localhost:8200',\n" +
-          "    };");
-}
-
-// ── 5. .env (LibGuides credentials) ────────────────────────────────
+// ── 4. .env (LibGuides credentials) ────────────────────────────────
 const REQUIRED_ENV = ["LIBGUIDES_CLIENT_ID", "LIBGUIDES_CLIENT_SECRET"];
 
 if (!await fileExists(".env")) {
   warning(".env: not found\n" +
           "  Required for LibGuides API access (LIBGUIDES_CLIENT_ID, LIBGUIDES_CLIENT_SECRET).\n" +
-          "  /content-dashboard/api/libguides/* will return errors until it exists.\n" +
+          "  /lg/api/* will return errors until it exists.\n" +
           "  See DEPLOYMENT.md.");
 } else {
   const envText = await Deno.readTextFile(".env");
   const missing = REQUIRED_ENV.filter((name) => !readEnvVar(envText, name));
   if (missing.length > 0) {
     warning(`.env: missing or empty ${missing.join(", ")}\n` +
-            "  /content-dashboard/api/libguides/* will return errors until set.\n" +
+            "  /lg/api/* will return errors until set.\n" +
             "  See DEPLOYMENT.md.");
   }
 }
