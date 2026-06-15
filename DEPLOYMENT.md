@@ -36,3 +36,63 @@ The application is designed to run as a systemd service on Ubuntu Server 24.04 L
   so no per-environment configuration file is needed. In production, Apache proxies
   `/content-dashboard/` to the router on `:8200`, which serves `htdocs/` directly and
   proxies `/lg/api/*` and `/ds/api/*` per `etc/content-dashboard.conf-example`.
+
+## Troubleshooting
+
+Start with `journalctl -u content-dashboard.service -u content-dashboard-api.service`.
+
+### `status=203/EXEC`, "Start request repeated too quickly"
+
+systemd could not execve `bin/content-dashboard`. This almost always means
+`make` was not (re)run on production after `git pull`, so the binary is
+missing or stale. Run `make` in `/Sites/content-dashboard`, confirm
+`bin/content-dashboard` exists and is executable, then
+`sudo systemctl restart content-dashboard.service`.
+
+### "Ignoring invalid environment assignment 'export LIBGUIDES_CLIENT_ID=...'"
+### Router logs "LIBGUIDES_CLIENT_ID/LIBGUIDES_CLIENT_SECRET are empty"
+
+systemd's `EnvironmentFile=` does **not** support shell `export` syntax.
+`export FOO=bar` is parsed as a variable named `export FOO` (contains a
+space, which is invalid), so the whole line is silently dropped — the
+service starts, but `/lg/api/*` will fail. `.env` must contain bare
+assignments:
+
+```
+LIBGUIDES_CLIENT_ID="1043"
+LIBGUIDES_CLIENT_SECRET="..."
+```
+
+(Quotes are fine on Ubuntu 24.04 / systemd >= 246.) After editing `.env`,
+run `sudo systemctl restart content-dashboard.service`.
+
+### Static files (`/content-dashboard/modules/*.js`) load, but
+### `/content-dashboard/api/*` returns 403
+
+This means Apache is proxying `/content-dashboard/` to the wrong port —
+most likely `datasetd` (`:8201`) instead of the router (`:8200`). datasetd
+also serves `htdocs/` (its own `htdocs:` key in `content_dashboard_api.yaml`),
+so static assets succeed, but it has no `/api/config`, `/api/whoami`, etc.
+routes and returns 403 for them.
+
+Confirm by hitting the router directly on the production host, bypassing
+Apache:
+
+```bash
+curl -i http://127.0.0.1:8200/api/config
+```
+
+If that returns `200`, the app is fine and the **deployed** Apache vhost
+(`/etc/apache2/sites-enabled/apps.library.caltech.edu.conf` — a different
+file from `etc/content-dashboard.conf-example`) has a stale
+`ProxyPassMatch`/`ProxyPassReverse` target. Update it to match
+`etc/content-dashboard.conf-example` (router on `:8200`, datasetd on
+`:8201` internal-only) and reload:
+
+```bash
+sudo apache2ctl configtest && sudo systemctl reload apache2
+```
+
+Note: the router's `:8200` / datasetd's `:8201` port assignment was
+swapped during the 2026-06-15 production update. Any Apache config
+deployed before that change will need this fix.
