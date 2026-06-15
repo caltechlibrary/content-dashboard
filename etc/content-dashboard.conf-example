@@ -4,19 +4,19 @@ ProxyPreserveHost On
 # Redirect bare path to trailing-slash form
 Redirect "/content-dashboard" "/content-dashboard/"
 
-# --- content-dashboard (:8201) ---
+# --- content-dashboard (:8200) ---
 # Serves htdocs/ static files, /api/* (config, whoami, health),
-# /lg/api/* (proxied LibGuides), and /ds/api/* (proxied to datasetd :8200,
+# /lg/api/* (proxied LibGuides), and /ds/api/* (proxied to datasetd :8201,
 # internal-only).
-ProxyPassMatch "^/content-dashboard/(.*)" "http://localhost:8201/$1"
-ProxyPassReverse "/content-dashboard/" "http://localhost:8201/"
+ProxyPassMatch "^/content-dashboard/(.*)" "http://localhost:8200/$1"
+ProxyPassReverse "/content-dashboard/" "http://localhost:8200/"
 
 #<!-- content-dashboard access control -->
 <Location /content-dashboard/>
   AuthType shibboleth
   ShibRequestSetting requireSession 1
-  require valid-user
-  #require user library-user@caltech.edu ...
+  #require valid-user
+  require user staff1@example.edu staff2@example.edu staff3@example.edu
   RequestHeader set Remote-User "%{REMOTE_USER}e"
 </Location>
 #<!-- end content-dashboard -->

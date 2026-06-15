@@ -11,16 +11,16 @@ authentication. The router is the only browser-facing service; datasetd is inter
 ```
 Browser → Apache + Shibboleth (apps.library.caltech.edu)
               │
-              └─ /content-dashboard/  →  router  :8201
+              └─ /content-dashboard/  →  router  :8200
                                           ├─ /api/{config,whoami,health}  (native)
                                           ├─ /lg/api/*  →  LibGuides API (proxied)
-                                          ├─ /ds/api/*  →  datasetd :8200 (proxied, internal-only)
+                                          ├─ /ds/api/*  →  datasetd :8201 (proxied, internal-only)
                                           └─ everything else → htdocs/ static files
 ```
 
 In development, Apache and Shibboleth are not involved. The browser speaks directly to
-the router on `http://localhost:8201/`, which still proxies `/ds/api/*` to datasetd on
-`http://localhost:8200/`.
+the router on `http://localhost:8200/`, which still proxies `/ds/api/*` to datasetd on
+`http://localhost:8201/`.
 
 ---
 
@@ -48,14 +48,14 @@ and warnings (orange) with remediation hints. Exit code is 0 on success, 1 on er
 
 ---
 
-## Configuration files: content_dashboard.yaml and api_router.yaml
+## Configuration files: content_dashboard.yaml and content_dashboard_api.yaml
 
 Service configuration is split across two files at the repository root:
 
-- `content_dashboard.yaml` — read by `datasetd`. Its YAML decoder is strict
+- `content_dashboard_api.yaml` — read by `datasetd`. Its YAML decoder is strict
   (unknown top-level keys are a fatal error), so this file may only contain
   `host`, `htdocs`, `schemas`, and `collections`.
-- `api_router.yaml` — read by the router. Holds `browser_config` and
+- `content_dashboard.yaml` — read by the router. Holds `browser_config` and
   `router` settings (including the `dataset.base_url` used to reach datasetd).
 
 Do not commit credentials — supply them via environment variables (see below).
@@ -63,9 +63,9 @@ Do not commit credentials — supply them via environment variables (see below).
 ### Top-level server settings
 
 ```yaml
-host: localhost:8200   # Address datasetd listens on. Internal-only; not
+host: localhost:8201   # Address datasetd listens on. Internal-only; not
                        # exposed to the browser or Apache.
-                       # Change the port if 8200 is taken on your machine,
+                       # Change the port if 8201 is taken on your machine,
                        # and update router.dataset.base_url to match.
 
 htdocs: htdocs         # Path to the browser-served directory, relative to this file.
@@ -92,8 +92,8 @@ collections:
 ### browser_config
 
 These values are served to the browser at `GET /api/config` by the router.
-They replace the old `htdocs/config.js` file. They live in `api_router.yaml`,
-not `content_dashboard.yaml`.
+They replace the old `htdocs/config.js` file. They live in `content_dashboard.yaml`,
+not `content_dashboard_api.yaml`.
 
 ```yaml
 browser_config:
@@ -126,14 +126,14 @@ browser_config:
 ### router
 
 Runtime configuration for the Deno router. This section also lives in
-`api_router.yaml`.
+`content_dashboard.yaml`.
 
 ```yaml
 router:
-  port: 8201               # Port the router listens on.
-                           # Change if 8201 is taken. Must match the Apache ProxyPass rule.
+  port: 8200               # Port the router listens on.
+                           # Change if 8200 is taken. Must match the Apache ProxyPass rule.
   dataset:
-    base_url: "http://localhost:8200"  # Where datasetd listens. The router
+    base_url: "http://localhost:8201"  # Where datasetd listens. The router
                                         # proxies /ds/api/* here.
   libguides:
     base_url: "https://lgapi-us.libapps.com/1.2"
@@ -185,37 +185,37 @@ jq -c 'to_entries[] | {key: .key, object: .value}' stewardship.json > stewardshi
 ### 3. Start datasetd
 
 ```shell
-datasetd content_dashboard.yaml
+datasetd content_dashboard_api.yaml
 ```
 
-datasetd listens on `http://localhost:8200/` and exposes the dataset JSON API at
-`http://localhost:8200/api/`. It is internal-only — the router proxies to it.
+datasetd listens on `http://localhost:8201/` and exposes the dataset JSON API at
+`http://localhost:8201/api/`. It is internal-only — the router proxies to it.
 
 ### 4. Start the router
 
 ```shell
 # With real LibGuides credentials:
-LIBGUIDES_CLIENT_ID=your_id LIBGUIDES_CLIENT_SECRET=your_secret deno task router
+LIBGUIDES_CLIENT_ID=your_id LIBGUIDES_CLIENT_SECRET=your_secret deno task content-dashboard
 
 # Without credentials (LibGuides calls will fail, but stewardship/audit work):
-deno task router-dev
+deno task content-dashboard-dev
 ```
 
-`router-dev` sets `DEV_USER=dev-user` so `/api/whoami` returns a usable identity
+`content-dashboard-dev` sets `DEV_USER=dev-user` so `/api/whoami` returns a usable identity
 without Shibboleth. To use your own identity instead:
 
 ```shell
-DEV_USER=yourname@caltech.edu deno run --allow-net --allow-env --allow-read --env-file=.env router/main.ts api_router.yaml
+DEV_USER=yourname@caltech.edu deno run --allow-net --allow-env --allow-read --env-file=.env router/main.ts content_dashboard.yaml
 ```
 
 ### 5. Open the application
 
 ```
-http://localhost:8201/
+http://localhost:8200/
 ```
 
 The router serves `htdocs/` directly and handles `/api/*`, `/lg/api/*`, and
-`/ds/api/*` (proxied to datasetd on `:8200`).
+`/ds/api/*` (proxied to datasetd on `:8201`).
 
 ### Building the browser client modules
 
@@ -252,12 +252,12 @@ ProxyPreserveHost On
 # Redirect bare path to trailing-slash form
 Redirect "/content-dashboard" "/content-dashboard/"
 
-# --- content-dashboard-router (:8201) ---
+# --- content-dashboard (:8200) ---
 # Serves htdocs/ static files, /api/* (config, whoami, health),
-# /lg/api/* (proxied LibGuides), and /ds/api/* (proxied to datasetd :8200,
+# /lg/api/* (proxied LibGuides), and /ds/api/* (proxied to datasetd :8201,
 # internal-only).
-ProxyPass        "/content-dashboard/" "http://localhost:8201/" retry=0
-ProxyPassReverse "/content-dashboard/" "http://localhost:8201/"
+ProxyPassMatch "^/content-dashboard/(.*)" "http://localhost:8200/$1"
+ProxyPassReverse "/content-dashboard/" "http://localhost:8200/"
 
 <Location /content-dashboard/>
     AuthType shibboleth
@@ -272,8 +272,8 @@ ProxyPassReverse "/content-dashboard/" "http://localhost:8201/"
 
 | Service | Default port | Configuration key |
 |---------|-------------|-------------------|
-| router | 8201 | `router.port:` in `api_router.yaml` |
-| datasetd | 8200 | `host:` in `content_dashboard.yaml`, `router.dataset.base_url:` in `api_router.yaml` |
+| router | 8200 | `router.port:` in `content_dashboard.yaml` |
+| datasetd | 8201 | `host:` in `content_dashboard_api.yaml`, `router.dataset.base_url:` in `content_dashboard.yaml` |
 
 datasetd is internal-only; only the router's port needs an Apache `ProxyPass` rule.
 If you change either port, update the relevant YAML file(s) and, for the router's
@@ -289,7 +289,7 @@ Once both services are running and Apache is configured:
 2. Authenticate via Shibboleth when prompted
 3. Open browser DevTools → Network tab
 4. Confirm `GET /content-dashboard/api/config` returns a JSON object with the
-   `browser_config` values from `api_router.yaml`
+   `browser_config` values from `content_dashboard.yaml`
 5. Confirm `GET /content-dashboard/api/whoami` returns `{ "user": "yourname@caltech.edu" }`
    (your Caltech email, not `"dev-user"`)
 6. Confirm the stewardship and audit views load data (via `/ds/api/...`, proxied

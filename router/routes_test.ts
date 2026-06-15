@@ -12,7 +12,7 @@ const cfg: AppConfig = {
     departments: ["Library"],
   },
   router: {
-    port: 8201,
+    port: 8200,
     libguides: {
       base_url: "https://example.invalid/1.2",
       token_url: "https://example.invalid/1.2/oauth/token",

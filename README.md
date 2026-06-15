@@ -6,11 +6,12 @@ LibGuides has a highlevel view of ownsership while Caltech Library has specific 
 
 ## Release Notes
 
-- version: 0.0.1
+- version: 0.0.2
 - status: active
-- released: 2026-06-12
+- released: 2026-06-15
 
-Initial working prototype for review. Contains a middle that proxies to datasetd back end as well as LibGuides API.
+- Improvements for production deployment
+- Bug fixes
 
 
 ### Authors

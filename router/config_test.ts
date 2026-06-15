@@ -10,7 +10,7 @@ browser_config:
   research_guide_groups: [3, 4]
   departments: ["Library"]
 router:
-  port: 8201
+  port: 8200
   libguides:
     base_url: "https://example.invalid/1.2"
     token_url: "https://example.invalid/1.2/oauth/token"
@@ -30,7 +30,7 @@ browser_config:
   research_guide_groups: [3, 4]
   departments: ["Library"]
 router:
-  port: 8201
+  port: 8200
   libguides:
     base_url: "https://example.invalid/1.2"
     token_url: "https://example.invalid/1.2/oauth/token"
@@ -61,7 +61,7 @@ Deno.test("loadConfig expands ${VAR} in libguides credentials from the environme
       const cfg = await loadConfig(path);
       assertEquals(cfg.router.libguides.client_id, "abc123");
       assertEquals(cfg.router.libguides.client_secret, "s3cr3t");
-      assertEquals(cfg.router.port, 8201);
+      assertEquals(cfg.router.port, 8200);
       assertEquals(cfg.browser_config.departments, ["Library"]);
     });
   } finally {
@@ -80,10 +80,10 @@ Deno.test("loadConfig leaves unresolved env vars as an empty string", async () =
   });
 });
 
-Deno.test("loadConfig defaults dataset.base_url to http://localhost:8200 when absent", async () => {
+Deno.test("loadConfig defaults dataset.base_url to http://localhost:8201 when absent", async () => {
   await withTempConfig(SAMPLE_YAML, async (path) => {
     const cfg = await loadConfig(path);
-    assertEquals(cfg.router.dataset.base_url, "http://localhost:8200");
+    assertEquals(cfg.router.dataset.base_url, "http://localhost:8201");
   });
 });
 

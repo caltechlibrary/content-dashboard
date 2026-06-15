@@ -3,7 +3,7 @@
  * setup_check.ts — sanity-checks the content-dashboard environment.
  *
  * Verifies that required tools are installed at suitable versions and that
- * content_dashboard.yaml and api_router.yaml are present.
+ * content_dashboard_api.yaml and content_dashboard.yaml are present.
  *
  * Usage:
  *   deno task check-setup
@@ -118,31 +118,31 @@ if (denoOut !== null) {
 }
 
 if (!denoVersionOk) {
-  const routerBin = await fileExists("bin/content-dashboard-router");
+  const routerBin = await fileExists("bin/content-dashboard");
   if (routerBin) {
     warning(denoOut === null
-      ? "deno: not found — using compiled router at bin/content-dashboard-router"
-      : "deno: version too old — using compiled router at bin/content-dashboard-router");
+      ? "deno: not found — using compiled router at bin/content-dashboard"
+      : "deno: version too old — using compiled router at bin/content-dashboard");
   } else {
     error((denoOut === null
-      ? `deno: not found and no compiled router at bin/content-dashboard-router`
-      : `deno: version too old and no compiled router at bin/content-dashboard-router`) +
+      ? `deno: not found and no compiled router at bin/content-dashboard`
+      : `deno: version too old and no compiled router at bin/content-dashboard`) +
       `\n  Install Deno >= ${fmt(DENO_MIN)} from https://deno.com\n` +
       `  or compile the router:\n` +
-      `    deno compile --output bin/content-dashboard-router --allow-net --allow-env --allow-read router/main.ts`);
+      `    deno compile --output bin/content-dashboard --allow-net --allow-env --allow-read router/main.ts`);
   }
 }
 
-// ── 3. content_dashboard.yaml ─────────────────────────────────────
-if (!await fileExists("content_dashboard.yaml")) {
-  error("content_dashboard.yaml: not found\n" +
+// ── 3. content_dashboard_api.yaml ─────────────────────────────────
+if (!await fileExists("content_dashboard_api.yaml")) {
+  error("content_dashboard_api.yaml: not found\n" +
         "  This file must exist in the directory where you run datasetd.\n" +
         "  See SETUP.md for a full annotated example.");
 }
 
-// ── 3b. api_router.yaml ────────────────────────────────────────────
-if (!await fileExists("api_router.yaml")) {
-  error("api_router.yaml: not found\n" +
+// ── 3b. content_dashboard.yaml ─────────────────────────────────────
+if (!await fileExists("content_dashboard.yaml")) {
+  error("content_dashboard.yaml: not found\n" +
         "  This file must exist in the directory where you run the router.\n" +
         "  See SETUP.md for a full annotated example.");
 }

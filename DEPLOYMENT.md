@@ -15,7 +15,7 @@ The application is designed to run as a systemd service on Ubuntu Server 24.04 L
 6. Compile the app `make`
 7. Make sure datasetd is available and the right version
 8. Create the `.env` file that exports the LIBGUIDES_CLIENT_ID and LIBGUIDES_CLIENT_SECRET environment variables
-9. Add the etc/content-dashboard-router.service and etc/content-dashboard-api.service services to the production machine's systemd setup
+9. Add the etc/content-dashboard.service and etc/content-dashboard-api.service services to the production machine's systemd setup
 10. Update the Apache2 configure per the example in etc/content-dashboard.conf-example
 11. Start the service, restart apache and debug
 
@@ -34,5 +34,5 @@ The application is designed to run as a systemd service on Ubuntu Server 24.04 L
 
 - The browser app uses document-relative paths (`api/...`, `lg/api/...`, `ds/api/...`),
   so no per-environment configuration file is needed. In production, Apache proxies
-  `/content-dashboard/` to the router on `:8201`, which serves `htdocs/` directly and
+  `/content-dashboard/` to the router on `:8200`, which serves `htdocs/` directly and
   proxies `/lg/api/*` and `/ds/api/*` per `etc/content-dashboard.conf-example`.

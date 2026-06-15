@@ -5,7 +5,7 @@ ConditionPathExists=!/Sites/content-dashboard/content-dashboard-api_not_to_be_ru
 
 [Service]
 WorkingDirectory=/Sites/content-dashboard
-ExecStart=/usr/local/bin/datasetd content_dashboard.yaml
+ExecStart=/usr/local/bin/datasetd content_dashboard_api.yaml
 Type=simple
 Restart=always
 

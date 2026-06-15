@@ -2,7 +2,7 @@
 //
 // Browser-side client for the router's /lg/api/* endpoints (proxied
 // LibGuides). Paths are document-relative so this works whether the page
-// is served at http://localhost:8201/ (dev) or
+// is served at http://localhost:8200/ (dev) or
 // https://apps.library.caltech.edu/content-dashboard/ (prod).
 
 export interface Account {

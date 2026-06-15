@@ -6,14 +6,14 @@ PROJECT = content-dashboard
 
 BRANCH = $(shell git branch | grep '* ' | cut -d  -f 2)
 
-build: README.md about.md search.md CITATION.cff htdocs compile-router
+build: README.md about.md search.md CITATION.cff htdocs compile
 	@echo "$(PROJECT) build complete"
 
 bin: .FORCE
 	mkdir -p bin
 
-compile-router: bin
-	deno task compile-router
+compile: bin
+	deno task compile
 
 htdocs: .FORCE
 	deno task htdocs
@@ -55,4 +55,4 @@ clean: clean-website
 
 .FORCE:
 
-.PHONY: build website status save clean-website clean compile-router htdocs test
+.PHONY: build website status save clean-website clean compile htdocs test

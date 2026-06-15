@@ -3,7 +3,11 @@ import { AppConfig } from "./config.ts";
 import { makeLibGuides } from "./libguides.ts";
 import { makeDatasetProxy } from "./dataset.ts";
 
-const HTDOCS_ROOT = new URL("../htdocs", import.meta.url).pathname;
+// Resolved from cwd, not import.meta.url: in a `deno compile` binary,
+// import.meta.url points into a synthetic extraction path that doesn't
+// exist on disk. The systemd unit sets WorkingDirectory to the project
+// root, where htdocs/ lives.
+const HTDOCS_ROOT = `${Deno.cwd()}/htdocs`;
 
 export function buildRouter(cfg: AppConfig) {
   const lg = makeLibGuides(cfg.router.libguides, cfg.router.cache);

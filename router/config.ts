@@ -37,7 +37,7 @@ export interface AppConfig {
   router: RouterConfig;
 }
 
-const DEFAULT_DATASET_BASE_URL = "http://localhost:8200";
+const DEFAULT_DATASET_BASE_URL = "http://localhost:8201";
 
 export async function loadConfig(path: string): Promise<AppConfig> {
   const raw = await Deno.readTextFile(path);

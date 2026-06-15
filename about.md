@@ -13,7 +13,7 @@ contributor:
 
 
 repository_code: https://github.com/caltechlibrary/content-dashboard
-version: 0.0.1
+version: 0.0.2
 
 
 programming_language:
@@ -25,15 +25,16 @@ programming_language:
   - SQL
 
 
-date_released: 2026-06-12
+date_released: 2026-06-15
 ---
 
 About this software
 ===================
 
-## content-dashboard 0.0.1
+## content-dashboard 0.0.2
 
-Initial working prototype for review. Contains a middle that proxies to datasetd back end as well as LibGuides API.
+- Improvements for production deployment
+- Bug fixes
 
 ## Authors
 
