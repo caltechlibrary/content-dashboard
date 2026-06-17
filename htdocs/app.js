@@ -1,5 +1,5 @@
 import { getAccounts, getGuides } from './modules/lg-client.js';
-import { getAllObjects, putObject } from './modules/ds-client.js';
+import { getAllObjects, putObject, postObject } from './modules/ds-client.js';
 
 // Configuration
 // Populated at startup by loadConfig() via GET api/config from the router.
@@ -39,7 +39,7 @@ const state = {
   names: [],          // sorted staff names (from /accounts, or derived from guide data)
   guideOptions: [],   // sorted unique guide titles
   selectedName: '',   // shared across Website Pages + Research Guides
-  stewardship: {},    // page_id → { expert, editor } from datasetd
+  stewardship: {},    // page_id → { expert } from datasetd
   audit: {},          // 'page:{id}' | 'guide:{id}' → { links, accessibility, accuracy }
   manageFilters: { guide: '', showAssigned: true, showUnassigned: true },
   wpSort:  { col: 'guide', dir: 'asc' },
@@ -195,10 +195,6 @@ function expertCell(name) {
   return name ? esc(name) : '<span class="muted-italic">—</span>>';
 }
 
-function editorCell(name) {
-  return name ? esc(name) : '<span class="muted-italic">—</span>';
-}
-
 //  Data processing 
 function processGuides(guides) {
   const pages = [];
@@ -215,10 +211,8 @@ function processGuides(guides) {
     for (const page of guide.pages) {
       const jsonEntry         = state.stewardship[String(page.id)];
       const expert            = jsonEntry?.expert || null;
-      const editor            = jsonEntry?.editor || null;
       const department        = jsonEntry?.department || null;
       if (expert)    nameSet.add(expert);
-      if (editor)    nameSet.add(editor);
       if (ownerName) nameSet.add(ownerName);
       guideSet.add(guideTitle);
 
@@ -236,7 +230,6 @@ function processGuides(guides) {
         guideUpdated:      guide.updated || null,
         enableDisplay:     page.enable_display ?? 1,
         expert,
-        editor,
         department,
         freshness:         freshnessStatus(page.updated),
       });
@@ -353,20 +346,16 @@ function renderMyWebsitePages() {
   const name = state.selectedName;
   const container = el('view-my-website-pages');
   const pool = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId));
-  const pages = name ? pool.filter(p => p.expert === name || p.editor === name) : pool;
+  const pages = name ? pool.filter(p => p.expert === name) : pool;
   const needsUpdate = pages.filter(p => p.freshness !== 'current').length;
 
   let metricsHtml, metricsCols;
   if (name) {
-    metricsCols = 4;
+    metricsCols = 2;
     const asExpert  = pages.filter(p => p.expert === name).length;
-    const asEditor  = pages.filter(p => p.editor === name).length;
-    const missEdit  = pages.filter(p => p.expert === name && !p.editor).length;
     metricsHtml = `
       <div class="metric"><div class="metric-label">Expert on</div><div class="metric-value">${asExpert}</div></div>
-      <div class="metric"><div class="metric-label">Editor on</div><div class="metric-value">${asEditor}</div></div>
-      <div class="metric"><div class="metric-label">Needs update</div><div class="metric-value${needsUpdate > 0 ? ' danger' : ''}">${needsUpdate}</div></div>
-      <div class="metric"><div class="metric-label">Missing web editor</div><div class="metric-value${missEdit > 0 ? ' danger' : ''}">${missEdit}</div></div>`;
+      <div class="metric"><div class="metric-label">Needs update</div><div class="metric-value${needsUpdate > 0 ? ' danger' : ''}">${needsUpdate}</div></div>`;
   } else {
     metricsCols = 2;
     metricsHtml = `
@@ -380,7 +369,6 @@ function renderMyWebsitePages() {
     if      (wpSort.col === 'guide')      { va = a.guideTitle  || ''; vb = b.guideTitle  || ''; }
     else if (wpSort.col === 'page')       { va = a.pageLabel   || ''; vb = b.pageLabel   || ''; }
     else if (wpSort.col === 'expert')     { va = a.expert      || ''; vb = b.expert      || ''; }
-    else if (wpSort.col === 'editor')     { va = a.editor      || ''; vb = b.editor      || ''; }
     else if (wpSort.col === 'department') { va = a.department  || ''; vb = b.department  || ''; }
     else if (wpSort.col === 'updated')    { va = a.updated     || ''; vb = b.updated     || ''; }
     const cmp = String(va).localeCompare(String(vb));
@@ -388,7 +376,7 @@ function renderMyWebsitePages() {
   });
 
   const rowsHtml = sorted.length === 0
-    ? `<tr><td colspan="9"><div class="empty-state">No pages found.</div></td></tr>`
+    ? `<tr><td colspan="8"><div class="empty-state">No pages found.</div></td></tr>`
     : sorted.map(p => {
         const dateClass = p.freshness === 'very-stale' ? 'date-very-stale'
                         : p.freshness === 'stale'      ? 'date-stale' : '';
@@ -396,7 +384,6 @@ function renderMyWebsitePages() {
           <td title="${esc(p.pageLabel)}">${pageLink(p)}</td>
           <td class="col-guide" title="${esc(p.guideTitle)}">${esc(p.guideTitle)}</td>
           <td><span class="${p.expert ? 'chip-assigned' : 'chip-unassigned'}">${esc(p.expert || 'unassigned')}</span></td>
-          <td><span class="${p.editor ? 'chip-assigned' : 'chip-unassigned'}">${esc(p.editor || 'unassigned')}</span></td>
           <td><span class="${p.department ? 'chip-assigned' : 'chip-unassigned'}">${esc(p.department || 'unassigned')}</span></td>
           <td class="${dateClass}">${esc(formatDate(p.updated))}</td>
           ${auditCells('page:' + p.pageId)}
@@ -419,7 +406,7 @@ function renderMyWebsitePages() {
         <table>
           <colgroup>
             <col style="width:20%"><col style="width:17%">
-            <col style="width:10%"><col style="width:10%"><col style="width:11%"><col style="width:12%">
+            <col style="width:10%"><col style="width:21%"><col style="width:12%">
             <col style="width:7%"><col style="width:7%"><col style="width:6%">
           </colgroup>
           <thead>
@@ -427,14 +414,13 @@ function renderMyWebsitePages() {
               ${sortTh('Page', 'page', wpSort)}
               ${sortTh('Guide', 'guide', wpSort)}
               ${sortTh('Expert', 'expert', wpSort)}
-              ${sortTh('Editor', 'editor', wpSort)}
               ${sortTh('Department', 'department', wpSort)}
               ${sortTh('Last updated', 'updated', wpSort)}
               <th scope="col" class="col-audit-check">Links</th><th scope="col" class="col-audit-check">A11y</th><th scope="col" class="col-audit-check">Accuracy</th>
             </tr>
           </thead>
           <tbody id="wp-audit-tbody">${rowsHtml}</tbody>
-          ${auditTfoot('wp-audit-tbody', 6)}
+          ${auditTfoot('wp-audit-tbody', 5)}
         </table>
       </div>
     </div>`;
@@ -687,7 +673,7 @@ function runStaleReport() {
   state.reportFilters.stale.expert    = expert;
 
   let data = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId) && (p.freshness === 'stale' || p.freshness === 'very-stale'));
-  if (expert) data = data.filter(p => p.expert === expert || p.editor === expert);
+  if (expert) data = data.filter(p => p.expert === expert);
   if (before) {
     const cutoff = new Date(before).getTime();
     data = data.filter(p => { const d = parseDate(p.updated); return d && d.getTime() < cutoff; });
@@ -700,13 +686,12 @@ function runStaleReport() {
          <button class="btn-export" id="r-stale-export">Export CSV</button>
        </div>
        <div class="table-wrap"><table>
-         <colgroup><col style="width:26%"><col style="width:22%"><col style="width:16%"><col style="width:16%"><col style="width:12%"><col style="width:8%"></colgroup>
-         <thead><tr><th>Page</th><th>Guide</th><th>Expert</th><th>Editor</th><th>Last updated</th><th>Status</th></tr></thead>
+         <colgroup><col style="width:26%"><col style="width:22%"><col style="width:32%"><col style="width:12%"><col style="width:8%"></colgroup>
+         <thead><tr><th>Page</th><th>Guide</th><th>Expert</th><th>Last updated</th><th>Status</th></tr></thead>
          <tbody>${data.map(p=>`<tr>
            <td>${pageLink(p)}</td>
            <td class="col-guide">${esc(p.guideTitle)}</td>
            <td>${expertCell(p.expert)}</td>
-           <td>${editorCell(p.editor)}</td>
            ${dateTd(p.updated)}
            <td>${freshnessBadge(p.freshness)}</td>
          </tr>`).join('')}</tbody>
@@ -717,7 +702,6 @@ function runStaleReport() {
     { label:'Page',           get: p => p.pageLabel },
     { label:'Guide',          get: p => p.guideTitle },
     { label:'Expert', get: p => p.expert ?? '' },
-    { label:'Editor',     get: p => p.editor ?? '' },
     { label:'Last updated', get: p => formatDate(p.updated) },
     { label:'Days ago',     get: p => daysAgo(p.updated) },
     { label:'Status',       get: p => p.freshness },
@@ -1108,15 +1092,14 @@ function renderManageStewards() {
 
   let filtered = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId));
   if (f.guide) filtered = filtered.filter(p => p.guideTitle === f.guide);
-  if (!f.showAssigned)   filtered = filtered.filter(p => !p.expert && !p.editor && !p.department);
-  if (!f.showUnassigned) filtered = filtered.filter(p => p.expert || p.editor || p.department);
+  if (!f.showAssigned)   filtered = filtered.filter(p => !p.expert && !p.department);
+  if (!f.showUnassigned) filtered = filtered.filter(p => p.expert || p.department);
   const msSort = state.msSort;
   filtered = [...filtered].sort((a, b) => {
     let va, vb;
     if      (msSort.col === 'guide')      { va = a.guideTitle  || ''; vb = b.guideTitle  || ''; }
     else if (msSort.col === 'page')       { va = a.pageLabel   || ''; vb = b.pageLabel   || ''; }
     else if (msSort.col === 'expert')     { va = a.expert      || ''; vb = b.expert      || ''; }
-    else if (msSort.col === 'editor')     { va = a.editor      || ''; vb = b.editor      || ''; }
     else if (msSort.col === 'department') { va = a.department  || ''; vb = b.department  || ''; }
     const cmp = String(va).localeCompare(String(vb));
     return msSort.dir === 'asc' ? cmp : -cmp;
@@ -1137,7 +1120,7 @@ function renderManageStewards() {
     .join('');
 
   const rowsHtml = filtered.length === 0
-    ? `<tr><td colspan="5"><div class="empty-state">No pages match the current filters.</div></td></tr>`
+    ? `<tr><td colspan="4"><div class="empty-state">No pages match the current filters.</div></td></tr>`
     : filtered.map(p => `
         <tr data-page-id="${p.pageId}">
           <td title="${esc(p.pageLabel)}">${pageLink(p)}</td>
@@ -1147,12 +1130,6 @@ function renderManageStewards() {
               data-field="expert" data-page-id="${p.pageId}"
               aria-label="Expert for ${esc(p.pageLabel)}"
               value="${esc(p.expert || '')}" placeholder="unassigned">
-          </td>
-          <td>
-            <input class="steward-input" type="text" list="${nameListId}"
-              data-field="editor" data-page-id="${p.pageId}"
-              aria-label="Editor for ${esc(p.pageLabel)}"
-              value="${esc(p.editor || '')}" placeholder="unassigned">
           </td>
           <td>
             <select class="steward-input" data-field="department" data-page-id="${p.pageId}"
@@ -1187,14 +1164,13 @@ function renderManageStewards() {
         <table>
           <colgroup>
             <col style="width:22%"><col style="width:26%">
-            <col style="width:17%"><col style="width:17%"><col style="width:18%">
+            <col style="width:34%"><col style="width:18%">
           </colgroup>
           <thead>
             <tr>
               ${sortTh('Page', 'page', msSort)}
               ${sortTh('Guide', 'guide', msSort)}
               ${sortTh('Expert', 'expert', msSort)}
-              ${sortTh('Editor', 'editor', msSort)}
               ${sortTh('Department', 'department', msSort)}
             </tr>
           </thead>
@@ -1225,19 +1201,22 @@ function renderManageStewards() {
     const value  = input.value.trim();
     if (input.tagName === 'SELECT') input.dataset.empty = String(!value);
 
-    if (!state.stewardship[pageId]) state.stewardship[pageId] = { expert: '', editor: '', department: '' };
+    const isNewRecord = !state.stewardship[pageId];
+    if (isNewRecord) state.stewardship[pageId] = { expert: '', department: '' };
     state.stewardship[pageId][field] = value;
 
     // Keep page record in sync so other views reflect the change immediately
     const page = state.pages.find(p => String(p.pageId) === String(pageId));
     if (page) {
       if (field === 'expert')     page.expert     = value || null;
-      if (field === 'editor')     page.editor     = value || null;
       if (field === 'department') page.department = value || null;
     }
 
     const entry = state.stewardship[pageId];
-    putObject('stewardship.ds', pageId, { pageId, expert: entry.expert || '', editor: entry.editor || '', department: entry.department || '', updatedBy: CONFIG.currentUser });
+    const payload = { pageId, expert: entry.expert || '', department: entry.department || '', updatedBy: CONFIG.currentUser };
+    // PUT silently no-ops if the record doesn't exist yet — use POST to create it.
+    if (isNewRecord) postObject('stewardship.ds', pageId, payload);
+    else             putObject('stewardship.ds', pageId, payload);
   });
 }
 

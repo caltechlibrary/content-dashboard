@@ -22,6 +22,15 @@ async function putObject(collection, key, data) {
     body: JSON.stringify(data)
   });
 }
+async function postObject(collection, key, data) {
+  return await fetch(`ds/api/${collection}/object/${encodeURIComponent(key)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(data)
+  });
+}
 async function getAllObjects(collection) {
   const keys = await getKeys(collection);
   const result = {};
@@ -37,5 +46,6 @@ export {
   getAllObjects,
   getKeys,
   getObject,
+  postObject,
   putObject
 };

@@ -9,7 +9,7 @@ schemas:
     id: stewardship_model
     description: |
       Model for content stewardship assignments. Each entry represents
-      the expert and editor assignments for a LibGuides page.
+      the expert and department assignments for a LibGuides page.
     elements:
       - id: pageId
         type: text
@@ -26,14 +26,8 @@ schemas:
           name: expert
         label: "Expert"
 
-      - id: editor
-        type: text
-        attributes:
-          name: editor
-        label: "Editor"
-
       - id: department
-        type: select
+        type: text
         attributes:
           name: department
         options:
@@ -136,14 +130,11 @@ collections:
     query:
       by_expert: |
         SELECT src FROM content_stewardship WHERE src->>'expert' = ?
-      by_editor: |
-        SELECT src FROM content_stewardship WHERE src->>'editor' = ?
       by_department: |
         SELECT src FROM content_stewardship WHERE src->>'department' = ?
       unassigned: |
         SELECT src FROM content_stewardship
         WHERE (src->>'expert' IS NULL OR src->>'expert' = '')
-          AND (src->>'editor' IS NULL OR src->>'editor' = '')
       needs_update: |
         SELECT src FROM content_stewardship
         WHERE src->>'lastUpdated' < datetime('now', '-365 days')

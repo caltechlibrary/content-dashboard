@@ -36,6 +36,20 @@ export async function putObject(
   });
 }
 
+// PUT silently no-ops on a key that doesn't exist yet (datasetd quirk) —
+// use this for records that may not have been created before.
+export async function postObject(
+  collection: string,
+  key: string,
+  data: unknown,
+): Promise<Response> {
+  return await fetch(`ds/api/${collection}/object/${encodeURIComponent(key)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
 // Fetches every object in a collection, keyed by its key. Keys whose
 // object fetch fails are silently skipped (matches prior app.js behavior).
 export async function getAllObjects<T = Record<string, unknown>>(
