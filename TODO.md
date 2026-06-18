@@ -4,6 +4,7 @@
 ## Bugs
 
 - [x] The static content isn't being handled correctly, looks like middleware is returning 400 errors for static content
+- [ ] Router test bugs, the URL `http://localhost/...` are not correct in the test. They need to include the port the router is living on
 
 ## Next
 
