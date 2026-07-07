@@ -369,6 +369,26 @@ th {
 .sort-indicator { font-size: 9px; margin-left: 2px; opacity: 0.25; }
 .sort-indicator.sort-active { opacity: 0.8; }
 
+/* Per-column filtering lives in the header: a search box under each title.
+   Empty expert/department rows match a search for "unassigned". */
+.header-search {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  border: 1px solid #d1d5db;
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--text);
+  background: #fff;
+}
+.header-search:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px rgba(29,158,117,.10);
+}
+
 td {
   padding: 8px 12px;
   border-bottom: 0.5px solid var(--border);

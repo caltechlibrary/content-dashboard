@@ -41,7 +41,7 @@ const state = {
   selectedName: '',   // shared across Website Pages + Research Guides
   stewardship: {},    // page_id → { expert } from datasetd
   audit: {},          // 'page:{id}' | 'guide:{id}' → { links, accessibility, accuracy }
-  manageFilters: { guide: '', showAssigned: true, showUnassigned: true },
+  manageFilters: { page: '', guide: '', expert: '', department: '' },
   wpSort:  { col: 'guide', dir: 'asc' },
   rgSort:  { col: 'guide', dir: 'asc' },
   msSort:  { col: 'guide', dir: 'asc' },
@@ -1090,10 +1090,20 @@ function renderManageStewards() {
   const f = state.manageFilters;
   const container = el('view-manage-stewards');
 
+  // Remember the focused header search box so it survives the re-render each keystroke triggers
+  const focused    = document.activeElement;
+  const focusId    = focused && container.contains(focused) ? focused.id : null;
+  const focusStart = focusId ? focused.selectionStart : null;
+  const focusEnd   = focusId ? focused.selectionEnd   : null;
+
+  // Empty expert/department fields read as the word "unassigned" so they can be searched for like any value
+  const has = (val, q) => (String(val || '').toLowerCase() || 'unassigned').includes(q.trim().toLowerCase());
+
   let filtered = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId));
-  if (f.guide) filtered = filtered.filter(p => p.guideTitle === f.guide);
-  if (!f.showAssigned)   filtered = filtered.filter(p => !p.expert && !p.department);
-  if (!f.showUnassigned) filtered = filtered.filter(p => p.expert || p.department);
+  if (f.page)       filtered = filtered.filter(p => has(p.pageLabel,  f.page));
+  if (f.guide)      filtered = filtered.filter(p => has(p.guideTitle, f.guide));
+  if (f.expert)     filtered = filtered.filter(p => has(p.expert,     f.expert));
+  if (f.department) filtered = filtered.filter(p => has(p.department, f.department));
   const msSort = state.msSort;
   filtered = [...filtered].sort((a, b) => {
     let va, vb;
@@ -1110,14 +1120,6 @@ function renderManageStewards() {
     <datalist id="${nameListId}">
       ${state.names.map(n => `<option value="${esc(n)}">`).join('')}
     </datalist>`;
-
-  const guideOptHtml = state.pages
-    .filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId))
-    .map(p => p.guideTitle)
-    .filter((t,i,a) => t && a.indexOf(t) === i)
-    .sort()
-    .map(t => `<option value="${esc(t)}" ${t === f.guide ? 'selected' : ''}>${esc(t)}</option>`)
-    .join('');
 
   const rowsHtml = filtered.length === 0
     ? `<tr><td colspan="4"><div class="empty-state">No pages match the current filters.</div></td></tr>`
@@ -1141,37 +1143,33 @@ function renderManageStewards() {
           </td>
         </tr>`).join('');
 
+  // Sortable column title (Page/Guide only) — a clickable span so the header search box doesn't trigger a sort
+  const sortTitle = (label, col) => {
+    const active = msSort.col === col;
+    const arrow  = active ? (msSort.dir === 'asc' ? ' ▲' : ' ▼') : ' ▲';
+    return `<span class="sort-th${active ? ' sort-th-active' : ''}" data-ms-sort="${col}">${label}<span class="sort-indicator${active ? ' sort-active' : ''}">${arrow}</span></span>`;
+  };
+  const searchBox = (col, label) =>
+    `<input class="header-search" type="search" id="ms-search-${col}" value="${esc(f[col])}" placeholder="Filter…" aria-label="Filter by ${label}">`;
+
   container.innerHTML = `
     ${nameListHtml}
     <div class="topbar">
       <h1>Assign Roles</h1>
     </div>
     <div class="content">
-      <div class="filter-row">
-        <label class="filter-label" for="ms-guide">Filter by Guide:</label>
-        <select id="ms-guide">
-          <option value="">All Pages</option>
-          ${guideOptHtml}
-        </select>
-        <label class="checkbox-label">
-          <input type="checkbox" id="ms-show-assigned" ${f.showAssigned ? 'checked' : ''}> Assigned
-        </label>
-        <label class="checkbox-label">
-          <input type="checkbox" id="ms-show-unassigned" ${f.showUnassigned ? 'checked' : ''}> Unassigned
-        </label>
-      </div>
       <div class="table-wrap">
         <table>
           <colgroup>
-            <col style="width:22%"><col style="width:26%">
-            <col style="width:34%"><col style="width:18%">
+            <col style="width:20%"><col style="width:24%">
+            <col style="width:30%"><col style="width:26%">
           </colgroup>
           <thead>
             <tr>
-              ${sortTh('Page', 'page', msSort)}
-              ${sortTh('Guide', 'guide', msSort)}
-              ${sortTh('Expert', 'expert', msSort)}
-              ${sortTh('Department', 'department', msSort)}
+              <th scope="col">${sortTitle('Page', 'page')}${searchBox('page', 'page')}</th>
+              <th scope="col">${sortTitle('Guide', 'guide')}${searchBox('guide', 'guide')}</th>
+              <th scope="col"><span class="th-label">Expert</span>${searchBox('expert', 'expert')}</th>
+              <th scope="col"><span class="th-label">Department</span>${searchBox('department', 'department')}</th>
             </tr>
           </thead>
           <tbody id="ms-tbody">${rowsHtml}</tbody>
@@ -1179,18 +1177,32 @@ function renderManageStewards() {
       </div>
     </div>`;
 
-  el('ms-guide')?.addEventListener('change', e => { state.manageFilters.guide = e.target.value; renderManageStewards(); });
-  el('ms-show-assigned')?.addEventListener('change', e => { state.manageFilters.showAssigned = e.target.checked; renderManageStewards(); });
-  el('ms-show-unassigned')?.addEventListener('change', e => { state.manageFilters.showUnassigned = e.target.checked; renderManageStewards(); });
-  container.querySelectorAll('th[data-sort]').forEach(th => {
-    th.addEventListener('click', () => {
-      const col = th.dataset.sort;
+  ['page', 'guide', 'expert', 'department'].forEach(col => {
+    el(`ms-search-${col}`)?.addEventListener('input', e => {
+      state.manageFilters[col] = e.target.value;
+      renderManageStewards();
+    });
+  });
+  container.querySelectorAll('[data-ms-sort]').forEach(span => {
+    span.addEventListener('click', () => {
+      const col = span.dataset.msSort;
       state.msSort = state.msSort.col === col
         ? { col, dir: state.msSort.dir === 'asc' ? 'desc' : 'asc' }
         : { col, dir: 'asc' };
       renderManageStewards();
     });
   });
+
+  // Put the cursor back where it was so typing in a header filter isn't interrupted by the re-render
+  if (focusId) {
+    const box = el(focusId);
+    if (box) {
+      box.focus();
+      if (focusStart != null && box.setSelectionRange) {
+        try { box.setSelectionRange(focusStart, focusEnd); } catch (_) {}
+      }
+    }
+  }
 
   // Inline edit — save to datasetd on change
   el('ms-tbody')?.addEventListener('change', e => {
