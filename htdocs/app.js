@@ -44,7 +44,6 @@ const state = {
   manageFilters: { page: '', guide: '', expert: '', department: '' },
   wpSort:  { col: 'guide', dir: 'asc' },
   rgSort:  { col: 'guide', dir: 'asc' },
-  msSort:  { col: 'guide', dir: 'asc' },
   reportFilters: {
     stale:        { expert: '', olderThan: '' },
     unpublished:  {},
@@ -1104,16 +1103,10 @@ function renderManageStewards() {
   if (f.guide)      filtered = filtered.filter(p => has(p.guideTitle, f.guide));
   if (f.expert)     filtered = filtered.filter(p => has(p.expert,     f.expert));
   if (f.department) filtered = filtered.filter(p => has(p.department, f.department));
-  const msSort = state.msSort;
-  filtered = [...filtered].sort((a, b) => {
-    let va, vb;
-    if      (msSort.col === 'guide')      { va = a.guideTitle  || ''; vb = b.guideTitle  || ''; }
-    else if (msSort.col === 'page')       { va = a.pageLabel   || ''; vb = b.pageLabel   || ''; }
-    else if (msSort.col === 'expert')     { va = a.expert      || ''; vb = b.expert      || ''; }
-    else if (msSort.col === 'department') { va = a.department  || ''; vb = b.department  || ''; }
-    const cmp = String(va).localeCompare(String(vb));
-    return msSort.dir === 'asc' ? cmp : -cmp;
-  });
+  // No interactive sort on this view; keep a stable read order by guide then page
+  filtered = [...filtered].sort((a, b) =>
+    (a.guideTitle || '').localeCompare(b.guideTitle || '') ||
+    (a.pageLabel  || '').localeCompare(b.pageLabel  || ''));
 
   const nameListId = 'steward-names-list';
   const nameListHtml = `
@@ -1143,12 +1136,6 @@ function renderManageStewards() {
           </td>
         </tr>`).join('');
 
-  // Sortable column title (Page/Guide only) — a clickable span so the header search box doesn't trigger a sort
-  const sortTitle = (label, col) => {
-    const active = msSort.col === col;
-    const arrow  = active ? (msSort.dir === 'asc' ? ' ▲' : ' ▼') : ' ▲';
-    return `<span class="sort-th${active ? ' sort-th-active' : ''}" data-ms-sort="${col}">${label}<span class="sort-indicator${active ? ' sort-active' : ''}">${arrow}</span></span>`;
-  };
   const searchBox = (col, label) =>
     `<input class="header-search" type="search" id="ms-search-${col}" value="${esc(f[col])}" placeholder="Filter…" aria-label="Filter by ${label}">`;
 
@@ -1166,8 +1153,8 @@ function renderManageStewards() {
           </colgroup>
           <thead>
             <tr>
-              <th scope="col">${sortTitle('Page', 'page')}${searchBox('page', 'page')}</th>
-              <th scope="col">${sortTitle('Guide', 'guide')}${searchBox('guide', 'guide')}</th>
+              <th scope="col"><span class="th-label">Page</span>${searchBox('page', 'page')}</th>
+              <th scope="col"><span class="th-label">Guide</span>${searchBox('guide', 'guide')}</th>
               <th scope="col"><span class="th-label">Expert</span>${searchBox('expert', 'expert')}</th>
               <th scope="col"><span class="th-label">Department</span>${searchBox('department', 'department')}</th>
             </tr>
@@ -1180,15 +1167,6 @@ function renderManageStewards() {
   ['page', 'guide', 'expert', 'department'].forEach(col => {
     el(`ms-search-${col}`)?.addEventListener('input', e => {
       state.manageFilters[col] = e.target.value;
-      renderManageStewards();
-    });
-  });
-  container.querySelectorAll('[data-ms-sort]').forEach(span => {
-    span.addEventListener('click', () => {
-      const col = span.dataset.msSort;
-      state.msSort = state.msSort.col === col
-        ? { col, dir: state.msSort.dir === 'asc' ? 'desc' : 'asc' }
-        : { col, dir: 'asc' };
       renderManageStewards();
     });
   });
