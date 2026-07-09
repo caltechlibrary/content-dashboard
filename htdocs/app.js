@@ -1022,7 +1022,7 @@ async function runRgUnpublishedReport() {
 
   let guides;
   try {
-    guides = await getGuides({ status: 0, expand: 'pages,owner' });
+    guides = await getGuides({ status: 0, expand: 'owner' });
   } catch (err) {
     resultsEl.innerHTML = `<div class="empty-state">Failed to load: ${esc(err.message)}</div>`;
     btn.textContent = 'Run report';
@@ -1035,23 +1035,19 @@ async function runRgUnpublishedReport() {
 
   guides = guides.filter(g => CONFIG.RESEARCH_GUIDE_GROUPS.includes(Number(g.group_id)));
 
-  const rows = [];
-  for (const g of guides) {
+  const rows = guides.map(g => {
     const guideTitle = decodeEntities(g.name || g.title || '(untitled)');
     const owner      = g.owner ? `${g.owner.first_name ?? ''} ${g.owner.last_name ?? ''}`.trim() : '—';
-    for (const p of (g.pages || [])) {
-      const pageLabel = decodeEntities(p.label || p.name || '(untitled)');
-      const pageUrl   = p.friendly_url || p.url || null;
-      const pageHtml  = pageUrl
-        ? `<a class="page-link" href="${esc(pageUrl)}" target="_blank" rel="noopener">${esc(pageLabel)}</a>`
-        : esc(pageLabel);
-      rows.push({ pageLabel, pageUrl, guideTitle, owner, updated: formatDate(p.updated), pageHtml });
-    }
-  }
-  rows.sort((a, b) => a.guideTitle.localeCompare(b.guideTitle) || a.pageLabel.localeCompare(b.pageLabel));
+    const guideUrl   = g.friendly_url || g.url || null;
+    const guideHtml  = guideUrl
+      ? `<a class="page-link" href="${esc(guideUrl)}" target="_blank" rel="noopener">${esc(guideTitle)}</a>`
+      : esc(guideTitle);
+    return { guideTitle, guideUrl, owner, updated: formatDate(g.updated), guideHtml };
+  });
+  rows.sort((a, b) => a.guideTitle.localeCompare(b.guideTitle));
 
   if (!rows.length) {
-    resultsEl.innerHTML = `<div class="empty-state">No unpublished pages found.</div>`;
+    resultsEl.innerHTML = `<div class="empty-state">No unpublished guides found.</div>`;
     return;
   }
 
@@ -1061,22 +1057,20 @@ async function runRgUnpublishedReport() {
       <button class="btn-export" id="r-rgu-export">Export CSV</button>
     </div>
     <div class="table-wrap"><table>
-      <colgroup><col style="width:28%"><col style="width:28%"><col style="width:22%"><col style="width:22%"></colgroup>
-      <thead><tr><th>Page</th><th>Guide</th><th>Owner</th><th>Last updated</th></tr></thead>
+      <colgroup><col style="width:50%"><col style="width:28%"><col style="width:22%"></colgroup>
+      <thead><tr><th>Guide</th><th>Owner</th><th>Last updated</th></tr></thead>
       <tbody>${rows.map(r => `<tr>
-        <td>${r.pageHtml}</td>
-        <td class="col-guide">${esc(r.guideTitle)}</td>
+        <td>${r.guideHtml}</td>
         <td class="col-guide">${esc(r.owner)}</td>
         <td>${esc(r.updated)}</td>
       </tr>`).join('')}</tbody>
     </table></div>`;
 
-  el('r-rgu-export')?.addEventListener('click', () => exportCSV('unpublished-research-pages.csv', rows, [
-    { label:'Page',         get: r => r.pageLabel },
+  el('r-rgu-export')?.addEventListener('click', () => exportCSV('unpublished-research-guides.csv', rows, [
     { label:'Guide',        get: r => r.guideTitle },
     { label:'Owner',        get: r => r.owner },
     { label:'Last updated', get: r => r.updated },
-    { label:'URL',          get: r => r.pageUrl ?? '' },
+    { label:'URL',          get: r => r.guideUrl ?? '' },
   ]));
 }
 
