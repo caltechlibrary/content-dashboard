@@ -42,6 +42,7 @@ const state = {
   stewardship: {},    // page_id → { expert } from datasetd
   audit: {},          // 'page:{id}' | 'guide:{id}' → { links, accessibility, accuracy }
   manageFilters: { page: '', guide: '', expert: '', department: '' },
+  wpFilters: { page: '', guide: '', expert: '', department: '' },
   wpSort:  { col: 'guide', dir: 'asc' },
   rgSort:  { col: 'guide', dir: 'asc' },
   reportFilters: {
@@ -342,25 +343,23 @@ function researchOwnerOpts(selected = '') {
 
 // View: Website Pages
 function renderMyWebsitePages() {
-  const name = state.selectedName;
+  const f = state.wpFilters;
   const container = el('view-my-website-pages');
-  const pool = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId));
-  const pages = name ? pool.filter(p => p.expert === name) : pool;
-  const needsUpdate = pages.filter(p => p.freshness !== 'current').length;
 
-  let metricsHtml, metricsCols;
-  if (name) {
-    metricsCols = 2;
-    const asExpert  = pages.filter(p => p.expert === name).length;
-    metricsHtml = `
-      <div class="metric"><div class="metric-label">Expert on</div><div class="metric-value">${asExpert}</div></div>
-      <div class="metric"><div class="metric-label">Needs update</div><div class="metric-value${needsUpdate > 0 ? ' danger' : ''}">${needsUpdate}</div></div>`;
-  } else {
-    metricsCols = 2;
-    metricsHtml = `
-      <div class="metric"><div class="metric-label">Total pages</div><div class="metric-value">${pool.length}</div></div>
-      <div class="metric"><div class="metric-label">Needs update</div><div class="metric-value${needsUpdate > 0 ? ' danger' : ''}">${needsUpdate}</div></div>`;
-  }
+  // Remember the focused header search box so it survives the re-render each keystroke triggers
+  const focused    = document.activeElement;
+  const focusId    = focused && container.contains(focused) ? focused.id : null;
+  const focusStart = focusId ? focused.selectionStart : null;
+  const focusEnd   = focusId ? focused.selectionEnd   : null;
+
+  // Empty expert/department fields read as the word "unassigned" so they can be searched for like any value
+  const has = (val, q) => (String(val || '').toLowerCase() || 'unassigned').includes(q.trim().toLowerCase());
+
+  let pages = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId));
+  if (f.page)       pages = pages.filter(p => has(p.pageLabel,  f.page));
+  if (f.guide)      pages = pages.filter(p => has(p.guideTitle, f.guide));
+  if (f.expert)     pages = pages.filter(p => has(p.expert,     f.expert));
+  if (f.department) pages = pages.filter(p => has(p.department, f.department));
 
   const wpSort = state.wpSort;
   const sorted = [...pages].sort((a, b) => {
@@ -389,31 +388,25 @@ function renderMyWebsitePages() {
         </tr>`;
       }).join('');
 
+  const searchBox = (col, label) =>
+    `<input class="header-search" type="search" id="wp-search-${col}" value="${esc(f[col])}" placeholder="Filter…" aria-label="Filter by ${label}">`;
+
   container.innerHTML = `
     <div class="topbar"><h1>Website Pages</h1></div>
     <div class="content">
-      <div class="filter-row">
-        <label class="filter-label" for="wp-name">Filter To:</label>
-        <select id="wp-name">
-          <option value="">All Website Pages</option>
-          ${nameOptions(name)}
-        </select>
-        ${name ? '<a href="#" class="filter-reset-link" id="wp-reset">show all</a>' : ''}
-      </div>
-      <div class="metrics" style="grid-template-columns:repeat(${metricsCols},1fr)">${metricsHtml}</div>
       <div class="table-wrap">
         <table>
           <colgroup>
             <col style="width:20%"><col style="width:17%">
-            <col style="width:10%"><col style="width:21%"><col style="width:12%">
-            <col style="width:7%"><col style="width:7%"><col style="width:6%">
+            <col style="width:10%"><col style="width:13%"><col style="width:12%">
+            <col style="width:7%"><col style="width:7%"><col style="width:14%">
           </colgroup>
           <thead>
             <tr>
-              ${sortTh('Page', 'page', wpSort)}
-              ${sortTh('Guide', 'guide', wpSort)}
-              ${sortTh('Expert', 'expert', wpSort)}
-              ${sortTh('Department', 'department', wpSort)}
+              <th scope="col"><span class="th-label">Page</span>${searchBox('page', 'page')}</th>
+              <th scope="col"><span class="th-label">Guide</span>${searchBox('guide', 'guide')}</th>
+              <th scope="col"><span class="th-label">Expert</span>${searchBox('expert', 'expert')}</th>
+              <th scope="col"><span class="th-label">Department</span>${searchBox('department', 'department')}</th>
               ${sortTh('Last updated', 'updated', wpSort)}
               <th scope="col" class="col-audit-check">Links</th><th scope="col" class="col-audit-check">A11y</th><th scope="col" class="col-audit-check">Accuracy</th>
             </tr>
@@ -424,15 +417,31 @@ function renderMyWebsitePages() {
       </div>
     </div>`;
 
-  el('wp-name')?.addEventListener('change', e => { state.selectedName = e.target.value; renderCurrentView(); });
-  el('wp-reset')?.addEventListener('click', e => { e.preventDefault(); state.selectedName = ''; renderCurrentView(); });
+  ['page', 'guide', 'expert', 'department'].forEach(col => {
+    el(`wp-search-${col}`)?.addEventListener('input', e => {
+      state.wpFilters[col] = e.target.value;
+      renderMyWebsitePages();
+    });
+  });
+
+  // Put the cursor back where it was so typing in a header filter isn't interrupted by the re-render
+  if (focusId) {
+    const box = el(focusId);
+    if (box) {
+      box.focus();
+      if (focusStart != null && box.setSelectionRange) {
+        try { box.setSelectionRange(focusStart, focusEnd); } catch (_) {}
+      }
+    }
+  }
+
   container.querySelectorAll('th[data-sort]').forEach(th => {
     th.addEventListener('click', () => {
       const col = th.dataset.sort;
       state.wpSort = state.wpSort.col === col
         ? { col, dir: state.wpSort.dir === 'asc' ? 'desc' : 'asc' }
         : { col, dir: 'asc' };
-      renderCurrentView();
+      renderMyWebsitePages();
     });
   });
   el('wp-audit-tbody')?.addEventListener('change', e => {
