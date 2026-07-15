@@ -43,8 +43,9 @@ const state = {
   audit: {},          // 'page:{id}' | 'guide:{id}' → { links, accessibility, accuracy }
   manageFilters: { page: '', guide: '', expert: '', department: '' },
   wpFilters: { page: '', guide: '', expert: '', department: '' },
+  rgFilters: { guide: '', owner: '' },
   wpSort:  { col: 'guide', dir: 'asc' },
-  rgSort:  { col: 'guide', dir: 'asc' },
+  rgSort:  { col: 'guide', dir: 'asc' },   // RG only sorts by 'guide' (default) or 'updated' (Last updated column)
   reportFilters: {
     stale:        { expert: '', olderThan: '' },
     unpublished:  {},
@@ -459,8 +460,17 @@ function renderMyWebsitePages() {
 }
 
 function renderMyResearchGuides() {
-  const name = state.selectedName;
+  const f = state.rgFilters;
   const container = el('view-my-research-guides');
+
+  // Remember the focused header search box so it survives the re-render each keystroke triggers
+  const focused    = document.activeElement;
+  const focusId    = focused && container.contains(focused) ? focused.id : null;
+  const focusStart = focusId ? focused.selectionStart : null;
+  const focusEnd   = focusId ? focused.selectionEnd   : null;
+
+  // Empty owner reads as the word "unassigned" so it can be searched for like any value
+  const has = (val, q) => (String(val || '').toLowerCase() || 'unassigned').includes(q.trim().toLowerCase());
 
   const pool = state.pages.filter(p => CONFIG.RESEARCH_GUIDE_GROUPS.includes(p.groupId));
 
@@ -474,26 +484,18 @@ function renderMyResearchGuides() {
   }
 
   const rgSort = state.rgSort;
-  const allGuides = Array.from(allGuideMap.values()).map(g => {
+  let guides = Array.from(allGuideMap.values()).map(g => {
     const visiblePages = g.pages.filter(p => String(p.enableDisplay) === '1');
     return { ...g, pageCount: visiblePages.length, freshness: freshnessStatus(g.guideUpdated) };
   }).sort((a, b) => {
-    let va, vb;
-    if      (rgSort.col === 'guide')   { va = a.guideTitle  || ''; vb = b.guideTitle  || ''; }
-    else if (rgSort.col === 'owner')   { va = a.guideOwner  || ''; vb = b.guideOwner  || ''; }
-    else if (rgSort.col === 'pages')   { va = a.pageCount;          vb = b.pageCount; return rgSort.dir === 'asc' ? va - vb : vb - va; }
-    else if (rgSort.col === 'updated') { va = a.guideUpdated || ''; vb = b.guideUpdated || ''; }
+    const va = rgSort.col === 'updated' ? (a.guideUpdated || '') : (a.guideTitle || '');
+    const vb = rgSort.col === 'updated' ? (b.guideUpdated || '') : (b.guideTitle || '');
     const cmp = String(va).localeCompare(String(vb));
     return rgSort.dir === 'asc' ? cmp : -cmp;
   });
 
-  const ownerNames = [...new Set(allGuides.map(g => g.guideOwner).filter(Boolean))].sort((a,b) => a.localeCompare(b));
-  const ownerOpts = ownerNames.map(n =>
-    `<option value="${esc(n)}" ${n === name ? 'selected':''}>${esc(n)}</option>`
-  ).join('');
-
-  const guides = name ? allGuides.filter(g => g.guideOwner === name) : allGuides;
-  const needsUpdate = guides.filter(g => g.freshness !== 'current').length;
+  if (f.guide) guides = guides.filter(g => has(g.guideTitle, f.guide));
+  if (f.owner) guides = guides.filter(g => has(g.guideOwner, f.owner));
 
   const rowsHtml = guides.map(g => {
     const titleHtml = g.guideFriendlyUrl
@@ -510,27 +512,12 @@ function renderMyResearchGuides() {
     </tr>`;
   }).join('') || `<tr><td colspan="7"><div class="empty-state">No research guides found.</div></td></tr>`;
 
+  const searchBox = (col, label) =>
+    `<input class="header-search" type="search" id="rg-search-${col}" value="${esc(f[col])}" placeholder="Filter…" aria-label="Filter by ${label}">`;
+
   container.innerHTML = `
     <div class="topbar"><h1>Research Guides</h1></div>
     <div class="content">
-      <div class="filter-row">
-        <label class="filter-label" for="rg-name">Filter To:</label>
-        <select id="rg-name">
-          <option value="">All Research Guides</option>
-          ${ownerOpts}
-        </select>
-        ${name ? '<a href="#" class="filter-reset-link" id="rg-reset">show all</a>' : ''}
-      </div>
-      <div class="metrics" style="grid-template-columns:repeat(2,1fr)">
-        <div class="metric">
-          <div class="metric-label">${name ? 'Guides owned' : 'Total guides'}</div>
-          <div class="metric-value">${guides.length}</div>
-        </div>
-        <div class="metric">
-          <div class="metric-label">Needs update</div>
-          <div class="metric-value${needsUpdate > 0 ? ' danger' : ''}">${needsUpdate}</div>
-        </div>
-      </div>
       <div class="table-wrap">
         <table>
           <colgroup>
@@ -540,9 +527,9 @@ function renderMyResearchGuides() {
           </colgroup>
           <thead>
             <tr>
-              ${sortTh('Guide', 'guide', rgSort)}
-              ${sortTh('Owner', 'owner', rgSort)}
-              <th scope="col" class="col-count sort-th${rgSort.col === 'pages' ? ' sort-th-active' : ''}" data-sort="pages">Pages<span class="sort-indicator${rgSort.col === 'pages' ? ' sort-active' : ''}">${rgSort.col === 'pages' ? (rgSort.dir === 'asc' ? ' ▲' : ' ▼') : ' ▲'}</span></th>
+              <th scope="col"><span class="th-label">Guide</span>${searchBox('guide', 'guide')}</th>
+              <th scope="col"><span class="th-label">Owner</span>${searchBox('owner', 'owner')}</th>
+              <th scope="col" class="col-count"><span class="th-label">Pages</span></th>
               ${sortTh('Last updated', 'updated', rgSort)}
               <th scope="col" class="col-audit-check">Links</th><th scope="col" class="col-audit-check">A11y</th><th scope="col" class="col-audit-check">Accuracy</th>
             </tr>
@@ -566,17 +553,33 @@ function renderMyResearchGuides() {
     clearAuditField(link.dataset.field, link.dataset.tbody);
   });
 
-  el('rg-name')?.addEventListener('change', e => { state.selectedName = e.target.value; renderCurrentView(); });
-  el('rg-reset')?.addEventListener('click', e => { e.preventDefault(); state.selectedName = ''; renderCurrentView(); });
+  ['guide', 'owner'].forEach(col => {
+    el(`rg-search-${col}`)?.addEventListener('input', e => {
+      state.rgFilters[col] = e.target.value;
+      renderMyResearchGuides();
+    });
+  });
+
   container.querySelectorAll('th[data-sort]').forEach(th => {
     th.addEventListener('click', () => {
       const col = th.dataset.sort;
       state.rgSort = state.rgSort.col === col
         ? { col, dir: state.rgSort.dir === 'asc' ? 'desc' : 'asc' }
         : { col, dir: 'asc' };
-      renderCurrentView();
+      renderMyResearchGuides();
     });
   });
+
+  // Put the cursor back where it was so typing in a header filter isn't interrupted by the re-render
+  if (focusId) {
+    const box = el(focusId);
+    if (box) {
+      box.focus();
+      if (focusStart != null && box.setSelectionRange) {
+        try { box.setSelectionRange(focusStart, focusEnd); } catch (_) {}
+      }
+    }
+  }
 }
 
 
