@@ -14,22 +14,31 @@ async function getObject(collection, key) {
   return await res.json();
 }
 async function putObject(collection, key, data) {
-  return await fetch(`ds/api/${collection}/object/${encodeURIComponent(key)}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(data)
-  });
+  return await writeObject("PUT", collection, key, data);
 }
 async function postObject(collection, key, data) {
-  return await fetch(`ds/api/${collection}/object/${encodeURIComponent(key)}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(data)
-  });
+  return await writeObject("POST", collection, key, data);
+}
+async function writeObject(method, collection, key, data) {
+  const url = `ds/api/${collection}/object/${encodeURIComponent(key)}`;
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(data)
+    });
+  } catch (err) {
+    console.error(`[ds-client] ${method} ${url} network error:`, err);
+    throw err;
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error(`[ds-client] ${method} ${url} failed: ${res.status} ${res.statusText}`, body);
+  }
+  return res;
 }
 async function getAllObjects(collection) {
   const keys = await getKeys(collection);

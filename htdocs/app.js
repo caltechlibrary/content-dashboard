@@ -162,6 +162,20 @@ function auditTfoot(tbodyId, leadingCols) {
   </tr></tfoot>`;
 }
 
+// Build a complete audit record. datasetd needs all three check fields present
+// on every write (even with validation off) or it rejects the record with a 400.
+function auditPayload(key, state_) {
+  const [type, ...rest] = key.split(':');
+  const id = rest.join(':');
+  return {
+    type, id,
+    links:         !!state_.links,
+    accessibility: !!state_.accessibility,
+    accuracy:      !!state_.accuracy,
+    updatedBy:     CONFIG.currentUser,
+  };
+}
+
 async function clearAuditField(field, tbodyId) {
   const tbody = el(tbodyId);
   if (!tbody) return;
@@ -176,20 +190,19 @@ async function clearAuditField(field, tbodyId) {
     cb.checked = false;
   }
   if (keysToUpdate.length === 0) return;
-  await Promise.all(keysToUpdate.map(key => {
-    const [type, ...rest] = key.split(':');
-    const id = rest.join(':');
-    return putObject('audit.ds', key, { type, id, ...state.audit[key], updatedBy: CONFIG.currentUser });
-  }));
+  await Promise.all(keysToUpdate.map(key =>
+    putObject('audit.ds', key, auditPayload(key, state.audit[key]))));
 }
 
 async function saveAuditCheck(key, field, checked) {
+  const isNewRecord = !state.audit[key];
   const current = { ...(state.audit[key] || {}) };
   current[field] = checked;
   state.audit[key] = current;
-  const [type, ...rest] = key.split(':');
-  const id = rest.join(':');
-  await putObject('audit.ds', key, { type, id, ...current, updatedBy: CONFIG.currentUser });
+  const payload = auditPayload(key, current);
+  // PUT silently no-ops if the record doesn't exist yet — use POST to create it.
+  if (isNewRecord) await postObject('audit.ds', key, payload);
+  else             await putObject('audit.ds', key, payload);
 }
 
 function expertCell(name) {
@@ -398,9 +411,9 @@ function renderMyWebsitePages() {
       <div class="table-wrap">
         <table>
           <colgroup>
-            <col style="width:20%"><col style="width:17%">
-            <col style="width:10%"><col style="width:13%"><col style="width:12%">
-            <col style="width:7%"><col style="width:7%"><col style="width:14%">
+            <col style="width:22%"><col style="width:20%">
+            <col style="width:10%"><col style="width:14%"><col style="width:13%">
+            <col style="width:7%"><col style="width:7%"><col style="width:7%">
           </colgroup>
           <thead>
             <tr>

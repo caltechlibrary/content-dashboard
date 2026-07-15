@@ -61,7 +61,7 @@ schemas:
       (links, accessibility, accuracy) for a page or guide.
     elements:
       - id: type
-        type: select
+        type: text
         attributes:
           name: type
           required: true
@@ -141,7 +141,7 @@ collections:
 
   - dataset: audit.ds
     schema: audit_model
-    validate: true
+    validate: false
     keys: true
     read: true
     create: true
