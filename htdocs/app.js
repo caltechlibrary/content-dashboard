@@ -206,7 +206,7 @@ async function saveAuditCheck(key, field, checked) {
 }
 
 function expertCell(name) {
-  return name ? esc(name) : '<span class="muted-italic">—</span>>';
+  return name ? esc(name) : '<span class="chip-unassigned">unassigned</span>';
 }
 
 //  Data processing 
