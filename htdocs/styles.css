@@ -646,6 +646,19 @@ h3 { font-size: 1.125rem; }
   flex-shrink: 0;
 }
 
+/* ── Site-wide announcement ───────────────────────────── */
+.announce-banner {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: 1rem;
+  font-weight: 500;
+  padding: 8px 1.25rem;
+  border-bottom: 0.5px solid #f0c2c2;
+  flex-shrink: 0;
+  margin: 2rem 1rem 0 1.2rem;
+  border-radius: 5px;
+}
+
 .manage-hint {
   font-size: 1rem;
   color: var(--text-2);
