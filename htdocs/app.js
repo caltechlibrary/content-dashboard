@@ -43,7 +43,7 @@ const state = {
   stewardship: {},    // page_id → { expert } from datasetd
   audit: {},          // 'page:{id}' | 'guide:{id}' → { links, accessibility, accuracy }
   manageFilters: { page: '', guide: '', expert: '', department: '' },
-  wpFilters: { page: '', guide: '', expert: '', department: '' },
+  wpFilters: { page: '', guide: '', expert: '', department: '', hideHidden: false, hideRedirected: false },
   rgFilters: { guide: '', owner: '' },
   wpSort:  { col: 'guide', dir: 'asc' },
   rgSort:  { col: 'guide', dir: 'asc' },   // RG only sorts by 'guide' (default) or 'updated' (Last updated column)
@@ -376,11 +376,15 @@ function renderMyWebsitePages() {
   // Empty expert/department fields read as the word "unassigned" so they can be searched for like any value
   const has = (val, q) => (String(val || '').toLowerCase() || 'unassigned').includes(q.trim().toLowerCase());
 
-  let pages = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId));
+  const allPages = state.pages.filter(p => CONFIG.WEBSITE_PAGE_GROUPS.includes(p.groupId));
+  let pages = allPages;
   if (f.page)       pages = pages.filter(p => has(p.pageLabel,  f.page));
   if (f.guide)      pages = pages.filter(p => has(p.guideTitle, f.guide));
   if (f.expert)     pages = pages.filter(p => has(p.expert,     f.expert));
   if (f.department) pages = pages.filter(p => has(p.department, f.department));
+  // Same conditions pageLink() uses for the pills, so a toggle can't disagree with what's shown.
+  if (f.hideHidden)     pages = pages.filter(p => String(p.enableDisplay) === '1');
+  if (f.hideRedirected) pages = pages.filter(p => !p.pageRedirectUrl);
 
   const wpSort = state.wpSort;
   const sorted = [...pages].sort((a, b) => {
@@ -412,8 +416,26 @@ function renderMyWebsitePages() {
   const searchBox = (col, label) =>
     `<input class="header-search" type="search" id="wp-search-${col}" value="${esc(f[col])}" placeholder="Filter…" aria-label="Filter by ${label}">`;
 
+  const toggle = (key, label) =>
+    `<label class="filter-toggle">
+      <input type="checkbox" id="wp-toggle-${key}" ${f[key] ? 'checked' : ''}>
+      ${label}
+    </label>`;
+
+  // Only shown once something is actually filtered out — "287 of 287" is noise.
+  const countLine = sorted.length === allPages.length ? '' :
+    `<p class="filter-count">Showing ${sorted.length} of ${allPages.length} pages</p>`;
+
   container.innerHTML = `
-    <div class="topbar"><h1>Website Pages</h1></div>
+    <div class="topbar topbar-stacked">
+      <h1>Website Pages</h1>
+      <div class="filter-toggles">
+        <span class="filter-toggles-label">Filter:</span>
+        ${toggle('hideHidden', 'Hidden pages')}
+        ${toggle('hideRedirected', 'Redirected pages')}
+      </div>
+      ${countLine}
+    </div>
     <div class="content">
       <div class="table-wrap">
         <table>
@@ -441,6 +463,13 @@ function renderMyWebsitePages() {
   ['page', 'guide', 'expert', 'department'].forEach(col => {
     el(`wp-search-${col}`)?.addEventListener('input', e => {
       state.wpFilters[col] = e.target.value;
+      renderMyWebsitePages();
+    });
+  });
+
+  ['hideHidden', 'hideRedirected'].forEach(key => {
+    el(`wp-toggle-${key}`)?.addEventListener('change', e => {
+      state.wpFilters[key] = e.target.checked;
       renderMyWebsitePages();
     });
   });
