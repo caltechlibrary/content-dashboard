@@ -4,6 +4,7 @@ export interface BrowserConfig {
   stale_days: number;
   very_stale_days: number;
   session_key: string;
+  session_cache_ttl_seconds?: number;
   website_page_groups: number[];
   research_guide_groups: number[];
   departments: string[];

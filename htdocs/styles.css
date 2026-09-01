@@ -410,6 +410,21 @@ td a.page-link {
 
 td a.page-link:hover { text-decoration: underline; }
 
+/* Page cell: the title truncates, the badges after it keep their space. */
+.page-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.page-cell .page-link {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.page-cell .badge { flex: none; }
+
 /* Guide name cell */
 td.col-guide {
   color: var(--text-2);

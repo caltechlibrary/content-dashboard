@@ -14,6 +14,7 @@ async function loadConfig() {
     STALE_DAYS:            remote.stale_days,
     VERY_STALE_DAYS:       remote.very_stale_days,
     SESSION_KEY:           remote.session_key,
+    SESSION_CACHE_TTL_MS:  (remote.session_cache_ttl_seconds ?? 900) * 1000,
     WEBSITE_PAGE_GROUPS:   remote.website_page_groups,
     RESEARCH_GUIDE_GROUPS: remote.research_guide_groups,
     DEPARTMENTS:           remote.departments,
@@ -102,7 +103,10 @@ function formatDate(str) {
 }
 
 function formatTimestamp(ms) {
-  return new Date(ms).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+  const d = new Date(ms);
+  const time = d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+  if (d.toDateString() === new Date().toDateString()) return time;
+  return `${d.toLocaleDateString('en-US', { month:'short', day:'numeric' })} ${time}`;
 }
 
 function freshnessStatus(updatedStr) {
@@ -134,10 +138,10 @@ function dateTd(updatedStr) {
 function pageLink(p) {
   const link = p.pageFriendlyUrl
     ? `<a class="page-link" href="${esc(p.pageFriendlyUrl)}" target="_blank" rel="noopener">${esc(p.pageLabel)}</a>`
-    : esc(p.pageLabel);
-  const redirectBadge = p.pageRedirectUrl ? ` <span class="badge badge-muted">redirected</span>` : '';
-  const hiddenBadge   = String(p.enableDisplay) !== '1' ? ` <span class="badge badge-muted">hidden</span>` : '';
-  return link + redirectBadge + hiddenBadge;
+    : `<span class="page-link">${esc(p.pageLabel)}</span>`;
+  const redirectBadge = p.pageRedirectUrl ? `<span class="badge badge-muted">redirected</span>` : '';
+  const hiddenBadge   = String(p.enableDisplay) !== '1' ? `<span class="badge badge-muted">hidden</span>` : '';
+  return `<div class="page-cell">${link}${redirectBadge}${hiddenBadge}</div>`;
 }
 
 function auditCells(key) {
@@ -288,10 +292,13 @@ async function loadData(force = false) {
     if (cached) {
       try {
         const { data, ts } = JSON.parse(cached);
-        processGuides(data);
-        updateLastFetched(ts);
-        renderCurrentView();
-        return;
+        if (Date.now() - ts < CONFIG.SESSION_CACHE_TTL_MS) {
+          processGuides(data);
+          updateLastFetched(ts);
+          renderCurrentView();
+          return;
+        }
+        sessionStorage.removeItem(CONFIG.SESSION_KEY);
       } catch { /* fall through to fetch */ }
     }
   }

@@ -13,6 +13,7 @@ browser_config:
   stale_days: 365
   very_stale_days: 730
   session_key: "cs_guides_v1"
+  session_cache_ttl_seconds: 900
   website_page_groups: [26856, 27077]
   research_guide_groups: [10729]
   departments:
@@ -35,6 +36,6 @@ router:
     client_secret: "${LIBGUIDES_CLIENT_SECRET}"
   cache:
     enabled: true
-    ttl_seconds: 3600
+    ttl_seconds: 300
   dataset:
     base_url: "http://localhost:8201"
