@@ -38,8 +38,8 @@ Start with `journalctl -u content-dashboard.service -u content-dashboard-api.ser
 ### `status=203/EXEC`, "Start request repeated too quickly"
 
 systemd could not execve `bin/content-dashboard`. This almost always means
-`make` was not (re)run on production after `git pull`, so the binary is
-missing or stale. Run `make` in `/Sites/content-dashboard`, confirm
+`sudo make compile` was not (re)run on production after `git pull`, so the
+binary is missing or stale. Run it in `/Sites/content-dashboard`, confirm
 `bin/content-dashboard` exists and is executable, then
 `sudo systemctl restart content-dashboard.service`.
 
