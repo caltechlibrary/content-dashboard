@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
 import { makeLibGuides } from "./libguides.ts";
 import type { LibGuidesConfig } from "./config.ts";
 
@@ -27,6 +27,19 @@ async function withFetch(
     await fn();
   } finally {
     globalThis.fetch = original;
+  }
+}
+
+// Captures console.error so tests that exercise error paths don't print
+// stack traces while passing.
+async function withCapturedLogs(fn: (logs: string[]) => Promise<void>) {
+  const logs: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => logs.push(args.map(String).join(" "));
+  try {
+    await fn(logs);
+  } finally {
+    console.error = original;
   }
 }
 
@@ -100,28 +113,36 @@ Deno.test("handleAccounts proxies upstream error status", async () => {
 });
 
 Deno.test("handleAccounts returns 500 if the token request fails", async () => {
-  await withFetch(async (url) => {
-    if (url === cfg.token_url) {
-      return new Response("bad creds", { status: 401 });
-    }
-    throw new Error(`unexpected fetch: ${url}`);
-  }, async () => {
-    const lg = makeLibGuides(cfg, cacheOff);
-    const res = await lg.handleAccounts();
-    assertEquals(res.status, 500);
-    assertEquals(await res.text(), "Internal error");
+  await withCapturedLogs(async (logs) => {
+    await withFetch(async (url) => {
+      if (url === cfg.token_url) {
+        return new Response("bad creds", { status: 401 });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }, async () => {
+      const lg = makeLibGuides(cfg, cacheOff);
+      const res = await lg.handleAccounts();
+      assertEquals(res.status, 500);
+      assertEquals(await res.text(), "Internal error");
+    });
+    assertEquals(logs.length, 1);
+    assertStringIncludes(logs[0], "Token request failed: 401");
   });
 });
 
 Deno.test("handleAccounts returns 500 without calling fetch when LibGuides credentials are empty", async () => {
   const emptyCfg: LibGuidesConfig = { ...cfg, client_id: "", client_secret: "" };
-  await withFetch(async (url) => {
-    throw new Error(`unexpected fetch: ${url}`);
-  }, async () => {
-    const lg = makeLibGuides(emptyCfg, cacheOff);
-    const res = await lg.handleAccounts();
-    assertEquals(res.status, 500);
-    assertEquals(await res.text(), "Internal error");
+  await withCapturedLogs(async (logs) => {
+    await withFetch(async (url) => {
+      throw new Error(`unexpected fetch: ${url}`);
+    }, async () => {
+      const lg = makeLibGuides(emptyCfg, cacheOff);
+      const res = await lg.handleAccounts();
+      assertEquals(res.status, 500);
+      assertEquals(await res.text(), "Internal error");
+    });
+    assertEquals(logs.length, 1);
+    assertStringIncludes(logs[0], "credentials are not configured");
   });
 });
 

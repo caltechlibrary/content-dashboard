@@ -1,5 +1,18 @@
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
 import { loadConfig } from "./config.ts";
+
+// Captures console.warn so tests with deliberately empty credentials don't
+// print the warning while passing.
+async function withCapturedWarnings(fn: (warnings: string[]) => Promise<void>) {
+  const warnings: string[] = [];
+  const original = console.warn;
+  console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(" "));
+  try {
+    await fn(warnings);
+  } finally {
+    console.warn = original;
+  }
+}
 
 const SAMPLE_YAML = `
 browser_config:
@@ -73,17 +86,23 @@ Deno.test("loadConfig expands ${VAR} in libguides credentials from the environme
 Deno.test("loadConfig leaves unresolved env vars as an empty string", async () => {
   Deno.env.delete("TEST_LG_CLIENT_ID");
   Deno.env.delete("TEST_LG_CLIENT_SECRET");
-  await withTempConfig(SAMPLE_YAML, async (path) => {
-    const cfg = await loadConfig(path);
-    assertEquals(cfg.router.libguides.client_id, "");
-    assertEquals(cfg.router.libguides.client_secret, "");
+  await withCapturedWarnings(async (warnings) => {
+    await withTempConfig(SAMPLE_YAML, async (path) => {
+      const cfg = await loadConfig(path);
+      assertEquals(cfg.router.libguides.client_id, "");
+      assertEquals(cfg.router.libguides.client_secret, "");
+    });
+    assertEquals(warnings.length, 1);
+    assertStringIncludes(warnings[0], "are empty");
   });
 });
 
 Deno.test("loadConfig defaults dataset.base_url to http://localhost:8201 when absent", async () => {
-  await withTempConfig(SAMPLE_YAML, async (path) => {
-    const cfg = await loadConfig(path);
-    assertEquals(cfg.router.dataset.base_url, "http://localhost:8201");
+  await withCapturedWarnings(async () => {
+    await withTempConfig(SAMPLE_YAML, async (path) => {
+      const cfg = await loadConfig(path);
+      assertEquals(cfg.router.dataset.base_url, "http://localhost:8201");
+    });
   });
 });
 

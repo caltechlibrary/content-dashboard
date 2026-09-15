@@ -1,4 +1,4 @@
-import { assertEquals, assertNotEquals } from "jsr:@std/assert";
+import { assertEquals, assertNotEquals, assertStringIncludes } from "jsr:@std/assert";
 import { makeDatasetProxy } from "./dataset.ts";
 
 const BASE_URL = "http://example.invalid";
@@ -18,6 +18,19 @@ async function withFetch(
     await fn();
   } finally {
     globalThis.fetch = original;
+  }
+}
+
+// Captures console.error so tests that exercise error paths don't print
+// stack traces while passing.
+async function withCapturedLogs(fn: (logs: string[]) => Promise<void>) {
+  const logs: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => logs.push(args.map(String).join(" "));
+  try {
+    await fn(logs);
+  } finally {
+    console.error = original;
   }
 }
 
@@ -114,13 +127,17 @@ Deno.test("does not forward hop-by-hop response headers", async () => {
 });
 
 Deno.test("returns 502 JSON when the upstream is unreachable", async () => {
-  await withFetch(async () => {
-    throw new Error("connection refused");
-  }, async () => {
-    const proxy = makeDatasetProxy(BASE_URL);
-    const req = new Request("http://localhost/ds/api/stewardship.ds/keys");
-    const res = await proxy(req, "/ds/api/stewardship.ds/keys");
-    assertEquals(res.status, 502);
-    assertNotEquals((await res.json()).error, undefined);
+  await withCapturedLogs(async (logs) => {
+    await withFetch(async () => {
+      throw new Error("connection refused");
+    }, async () => {
+      const proxy = makeDatasetProxy(BASE_URL);
+      const req = new Request("http://localhost/ds/api/stewardship.ds/keys");
+      const res = await proxy(req, "/ds/api/stewardship.ds/keys");
+      assertEquals(res.status, 502);
+      assertNotEquals((await res.json()).error, undefined);
+    });
+    assertEquals(logs.length, 1);
+    assertStringIncludes(logs[0], "dataset proxy error");
   });
 });
