@@ -41,8 +41,15 @@ export function buildRouter(cfg: AppConfig) {
       return dsProxy(req, p);
     }
 
-    return serveDir(req, { fsRoot: HTDOCS_ROOT, quiet: true });
+    return serveStatic(req);
   };
+}
+
+// Static files revalidate instead of being cached.
+async function serveStatic(req: Request): Promise<Response> {
+  const res = await serveDir(req, { fsRoot: HTDOCS_ROOT, quiet: true });
+  res.headers.set("Cache-Control", "no-cache");
+  return res;
 }
 
 function handleWhoami(req: Request): Response {
