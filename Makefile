@@ -6,7 +6,7 @@ PROJECT = content-dashboard
 
 BRANCH = $(shell git branch | grep '* ' | cut -d  -f 2)
 
-build: README.md about.md search.md CITATION.cff htdocs compile
+build: README.md about.md search.md CITATION.cff compile
 	@echo "$(PROJECT) build complete"
 
 bin: .FORCE
