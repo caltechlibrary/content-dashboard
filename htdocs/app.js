@@ -266,7 +266,7 @@ async function loadData(force = false) {
   // Load stewardship from datasetd
   try {
     state.stewardship = await getAllObjects('stewardship.ds');
-  } catch { console.error('datasetd unavailable — stewardship data not loaded'); }
+  } catch (err) { console.error('could not load stewardship data:', err); }
 
   // Fetch staff accounts for name lists (router strips PII, only id/first_name/last_name returned)
   try {
@@ -285,7 +285,7 @@ async function loadData(force = false) {
   // Load audit state from datasetd
   try {
     state.audit = await getAllObjects('audit.ds');
-  } catch { console.error('datasetd unavailable — audit data not loaded'); }
+  } catch (err) { console.error('could not load audit data:', err); }
 
   if (!force) {
     const cached = sessionStorage.getItem(CONFIG.SESSION_KEY);

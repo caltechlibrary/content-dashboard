@@ -10,7 +10,11 @@ export async function getKeys(collection: string): Promise<string[]> {
   if (!res.ok) {
     throw new Error(`${collection} keys fetch failed: ${res.status}`);
   }
-  return await res.json();
+  // datasetd returns null, not an empty array, when a collection has no
+  // records. Return an empty list so an empty collection reads as empty
+  // instead of crashing the caller.
+  const keys = await res.json();
+  return Array.isArray(keys) ? keys : [];
 }
 
 export async function getObject<T = Record<string, unknown>>(
@@ -29,11 +33,7 @@ export async function putObject(
   key: string,
   data: unknown,
 ): Promise<Response> {
-  return await fetch(`ds/api/${collection}/object/${encodeURIComponent(key)}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
+  return await writeObject("PUT", collection, key, data);
 }
 
 // PUT silently no-ops on a key that doesn't exist yet (datasetd quirk) —
@@ -43,11 +43,39 @@ export async function postObject(
   key: string,
   data: unknown,
 ): Promise<Response> {
-  return await fetch(`ds/api/${collection}/object/${encodeURIComponent(key)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
+  return await writeObject("POST", collection, key, data);
+}
+
+// Logs the status and response body when a write fails. datasetd rejects a
+// bad record with a bare 400 and puts the reason in the body or an
+// x-validation-errors header, so without this the console shows nothing and
+// the save just quietly doesn't happen.
+async function writeObject(
+  method: "PUT" | "POST",
+  collection: string,
+  key: string,
+  data: unknown,
+): Promise<Response> {
+  const url = `ds/api/${collection}/object/${encodeURIComponent(key)}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  } catch (err) {
+    console.error(`[ds-client] ${method} ${url} network error:`, err);
+    throw err;
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error(
+      `[ds-client] ${method} ${url} failed: ${res.status} ${res.statusText}`,
+      body,
+    );
+  }
+  return res;
 }
 
 // Fetches every object in a collection, keyed by its key. Keys whose

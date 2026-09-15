@@ -4,7 +4,8 @@ async function getKeys(collection) {
   if (!res.ok) {
     throw new Error(`${collection} keys fetch failed: ${res.status}`);
   }
-  return await res.json();
+  const keys = await res.json();
+  return Array.isArray(keys) ? keys : [];
 }
 async function getObject(collection, key) {
   const res = await fetch(`ds/api/${collection}/object/${encodeURIComponent(key)}`);
