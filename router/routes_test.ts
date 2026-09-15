@@ -164,14 +164,20 @@ Deno.test("GET / serves htdocs/index.html", async () => {
   assertStringIncludes(body.toLowerCase(), "<!doctype html");
 });
 
+// serveDir hands back a response with the file still open behind it. When a
+// test only checks the status, nothing reads the body, so the file handle
+// stays open and Deno's leak check fails the test. Cancel the body to close
+// it. Deno 2.8 lets this slide; 2.7 on the production server does not.
 Deno.test("GET /styles.css serves the stylesheet", async () => {
   const router = buildRouter(cfg);
   const res = await router(new Request("http://localhost/styles.css"));
   assertEquals(res.status, 200);
+  await res.body?.cancel();
 });
 
 Deno.test("GET /nonexistent.xyz returns 404", async () => {
   const router = buildRouter(cfg);
   const res = await router(new Request("http://localhost/nonexistent.xyz"));
   assertEquals(res.status, 404);
+  await res.body?.cancel();
 });
