@@ -8,6 +8,7 @@ export interface BrowserConfig {
   website_page_groups: number[];
   research_guide_groups: number[];
   departments: string[];
+  confluence_base_url?: string;
 }
 
 export interface LibGuidesConfig {

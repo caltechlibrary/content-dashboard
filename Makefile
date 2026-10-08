@@ -19,8 +19,8 @@ htdocs: .FORCE
 	deno task htdocs
 
 test:
-	deno check router/*.ts lg-client.ts ds-client.ts
-	deno test --allow-read --allow-write --allow-env router/
+	deno check router/*.ts lg-client.ts ds-client.ts convert_confluence.ts
+	deno test --allow-read --allow-write --allow-env router/ convert_confluence_test.ts
 
 website: clean-website .FORCE
 	make -f website.mak

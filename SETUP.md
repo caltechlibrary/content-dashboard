@@ -166,6 +166,7 @@ Run once, from the repository root:
 ```shell
 dataset init stewardship.ds sqlite://collection.db
 dataset init audit.ds sqlite://collection.db
+dataset init confluence.ds sqlite://collection.db
 ```
 
 ### 2. Load seed stewardship data
@@ -181,6 +182,30 @@ To regenerate `stewardship.jsonl` from `stewardship.json`:
 ```shell
 jq -c 'to_entries[] | {key: .key, object: .value}' stewardship.json > stewardship.jsonl
 ```
+
+### 2b. Load the Confluence spaces
+
+There is no Confluence API available to us, so the space list comes from
+Confluence's own **Spaces report** CSV export (Confluence admin → Spaces →
+export). Convert it, then load it:
+
+```shell
+deno task convert-confluence "/path/to/Spaces report - ....csv"
+dataset load confluence.ds < confluence.jsonl
+```
+
+The converter keeps only spaces whose status is `CURRENT`, and skips personal
+spaces (their keys start with `~`) since there is no owner to assign on those.
+It imports four columns — space key, space name, last viewed, content count.
+Owners are assigned in the dashboard, never imported.
+
+Re-run both commands whenever a fresh export is pulled — only the converter,
+not the `init`. On a re-load, `dataset load` skips any space key it already
+has (it prints `duplicate key ..., skipping` and a load-error count) and adds
+the new ones. So owners already assigned in the dashboard survive a re-load,
+but the page counts and last-viewed dates on existing spaces do **not** get
+refreshed, and spaces that have since been archived are not removed. If you
+want those refreshed, the record has to be updated or deleted deliberately.
 
 ### 3. Start datasetd
 

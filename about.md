@@ -64,8 +64,6 @@ LibGuides has a highlevel view of ownsership while Caltech Library has specific 
 - SQL
 
 
-
-
 ## Software Requirements
 
 - dataset >= 2.5.1

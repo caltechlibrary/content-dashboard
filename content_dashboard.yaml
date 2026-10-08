@@ -16,6 +16,10 @@ browser_config:
   session_cache_ttl_seconds: 900
   website_page_groups: [26856, 27077]
   research_guide_groups: [10729]
+  # Base URL of our Confluence wiki. Space names in the Confluence Spaces
+  # view link to ${confluence_base_url}/spaces/<SPACE KEY>. Leave it out
+  # and the names render as plain text instead of links.
+  confluence_base_url: "https://caltechlibrary.atlassian.net/wiki"
   departments:
     - "Archives"
     - "ACS"

@@ -548,6 +548,12 @@ td.date-very-stale { color: var(--date-vstale); }
 .badge-violet  { background: #f5f3ff;          color: #7c3aed;            }
 
 /* ── Empty state ─────────────────────────────────────────────────── */
+.table-meta {
+  font-size: 0.875rem;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+
 .empty-state {
   text-align: center;
   padding: 2rem;
