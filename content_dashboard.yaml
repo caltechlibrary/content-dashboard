@@ -24,8 +24,7 @@ browser_config:
     - "Archives"
     - "ACS"
     - "CLOPS"
-    - "DLD"
-    - "LIT"
+    - "DnD"
     - "RS"
 
 # Deno API router configuration. Serves htdocs/, /api/* meta endpoints,

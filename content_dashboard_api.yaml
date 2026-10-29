@@ -35,8 +35,7 @@ schemas:
           - {"Archives": "Archives"}
           - {"ACS": "ACS"}
           - {"CLOPS": "CLOPS"}
-          - {"DLD": "DLD"}
-          - {"LIT": "LIT"}
+          - {"DnD": "DnD"}
           - {"RS": "RS"}
         label: "Department"
 
