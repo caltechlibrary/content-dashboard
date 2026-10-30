@@ -763,7 +763,7 @@ function renderConfluence() {
           <thead>
             <tr>
               <th scope="col" class="${sortCls('name', sort)}" data-sort="name"><span class="th-label">Space${sortArrow('name', sort)}</span>${searchBox('space', 'space')}</th>
-              <th scope="col" class="${sortCls('owner', sort)}" data-sort="owner"><span class="th-label">Owner${sortArrow('owner', sort)}</span>${searchBox('owner', 'owner')}</th>
+              <th scope="col" class="${sortCls('owner', sort)}" data-sort="owner"><span class="th-label">Coordinator${sortArrow('owner', sort)}</span>${searchBox('owner', 'owner')}</th>
               <th scope="col" class="${sortCls('pages', sort)}" data-sort="pages"><span class="th-label">Pages${sortArrow('pages', sort)}</span></th>
               <th scope="col" class="col-audit-check">Links</th><th scope="col" class="col-audit-check">A11y</th><th scope="col" class="col-audit-check">Accuracy</th>
             </tr>
