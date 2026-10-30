@@ -19,7 +19,7 @@ htdocs: .FORCE
 	deno task htdocs
 
 test:
-	deno check router/*.ts lg-client.ts ds-client.ts
+	deno check router/*.ts lg-client.ts ds-client.ts confluence-client.ts
 	deno test --allow-read --allow-write --allow-env router/
 
 website: clean-website .FORCE

@@ -29,6 +29,10 @@ router:
     token_url: "https://example.invalid/1.2/oauth/token"
     client_id: "\${TEST_LG_CLIENT_ID}"
     client_secret: "\${TEST_LG_CLIENT_SECRET}"
+  confluence:
+    base_url: "https://example.invalid/wiki"
+    email: "someone@example.com"
+    api_token: "token"
   cache:
     enabled: true
     ttl_seconds: 3600
@@ -49,6 +53,10 @@ router:
     token_url: "https://example.invalid/1.2/oauth/token"
     client_id: "id"
     client_secret: "secret"
+  confluence:
+    base_url: "https://example.invalid/wiki"
+    email: "someone@example.com"
+    api_token: "token"
   cache:
     enabled: true
     ttl_seconds: 3600
@@ -115,5 +123,38 @@ Deno.test("loadConfig expands ${VAR} in an explicit dataset.base_url", async () 
     });
   } finally {
     Deno.env.delete("TEST_DATASET_BASE_URL");
+  }
+});
+
+Deno.test("loadConfig expands ${VAR} in confluence credentials, and warns when they are empty", async () => {
+  const yaml = SAMPLE_YAML
+    .replace('"someone@example.com"', '"${TEST_CF_EMAIL}"')
+    .replace('"token"', '"${TEST_CF_API_TOKEN}"');
+  Deno.env.set("TEST_LG_CLIENT_ID", "abc123");
+  Deno.env.set("TEST_LG_CLIENT_SECRET", "s3cr3t");
+  Deno.env.set("TEST_CF_EMAIL", "someone@example.com");
+  Deno.env.set("TEST_CF_API_TOKEN", "t0k3n");
+  try {
+    await withTempConfig(yaml, async (path) => {
+      const cfg = await loadConfig(path);
+      assertEquals(cfg.router.confluence.email, "someone@example.com");
+      assertEquals(cfg.router.confluence.api_token, "t0k3n");
+    });
+
+    Deno.env.delete("TEST_CF_EMAIL");
+    Deno.env.delete("TEST_CF_API_TOKEN");
+    await withCapturedWarnings(async (warnings) => {
+      await withTempConfig(yaml, async (path) => {
+        const cfg = await loadConfig(path);
+        assertEquals(cfg.router.confluence.email, "");
+      });
+      assertEquals(warnings.length, 1);
+      assertStringIncludes(warnings[0], "CONFLUENCE_EMAIL/CONFLUENCE_API_TOKEN are empty");
+    });
+  } finally {
+    Deno.env.delete("TEST_LG_CLIENT_ID");
+    Deno.env.delete("TEST_LG_CLIENT_SECRET");
+    Deno.env.delete("TEST_CF_EMAIL");
+    Deno.env.delete("TEST_CF_API_TOKEN");
   }
 });

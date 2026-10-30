@@ -33,6 +33,12 @@ router:
     token_url: "https://lgapi-us.libapps.com/1.2/oauth/token"
     client_id: "${LIBGUIDES_CLIENT_ID}"
     client_secret: "${LIBGUIDES_CLIENT_SECRET}"
+  # Confluence Cloud, read with a personal API token. The token only sees
+  # the spaces its owner can see.
+  confluence:
+    base_url: "https://caltechlibrary.atlassian.net/wiki"
+    email: "${CONFLUENCE_EMAIL}"
+    api_token: "${CONFLUENCE_API_TOKEN}"
   cache:
     enabled: true
     ttl_seconds: 300

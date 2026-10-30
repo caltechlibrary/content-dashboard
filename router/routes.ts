@@ -1,6 +1,7 @@
 import { serveDir } from "jsr:@std/http/file-server";
 import { AppConfig } from "./config.ts";
 import { makeLibGuides } from "./libguides.ts";
+import { makeConfluence } from "./confluence.ts";
 import { makeDatasetProxy } from "./dataset.ts";
 
 // Resolved from cwd, not import.meta.url: in a `deno compile` binary,
@@ -11,6 +12,7 @@ const HTDOCS_ROOT = `${Deno.cwd()}/htdocs`;
 
 export function buildRouter(cfg: AppConfig) {
   const lg = makeLibGuides(cfg.router.libguides, cfg.router.cache);
+  const cf = makeConfluence(cfg.router.confluence, cfg.router.cache);
   const dsProxy = makeDatasetProxy(cfg.router.dataset.base_url);
 
   return async (req: Request): Promise<Response> => {
@@ -35,6 +37,10 @@ export function buildRouter(cfg: AppConfig) {
 
     if (p === "/lg/api/guides") {
       return lg.handleGuides(url.searchParams);
+    }
+
+    if (p === "/cf/api/spaces") {
+      return cf.handleSpaces();
     }
 
     if (p === "/ds" || p.startsWith("/ds/")) {

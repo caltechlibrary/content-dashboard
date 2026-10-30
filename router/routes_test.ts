@@ -19,6 +19,11 @@ const cfg: AppConfig = {
       client_id: "id",
       client_secret: "secret",
     },
+    confluence: {
+      base_url: "https://example.invalid/wiki",
+      email: "someone@example.com",
+      api_token: "token",
+    },
     cache: { enabled: false, ttl_seconds: 3600 },
     dataset: { base_url: "http://example.invalid" },
   },
@@ -134,6 +139,32 @@ Deno.test("GET /lg/api/guides forwards query params to LibGuides", async () => {
       guidesUrl,
       `${cfg.router.libguides.base_url}/guides?status=1&expand=pages%2Cowner`,
     );
+  });
+});
+
+Deno.test("GET /cf/api/spaces returns the Confluence space list", async () => {
+  const base = cfg.router.confluence.base_url;
+  await withFetch(async (url) => {
+    if (url.startsWith(`${base}/api/v2/spaces`)) {
+      return Response.json({
+        results: [{ key: "DLD", name: "Digital Library Development", type: "global" }],
+        _links: {},
+      });
+    }
+    if (url.startsWith(`${base}/rest/api/search`)) {
+      return Response.json({ totalSize: 199 });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () => {
+    const router = buildRouter(cfg);
+    const res = await router(new Request("http://localhost/cf/api/spaces"));
+    assertEquals(res.status, 200);
+    assertEquals(await res.json(), [{
+      spaceKey: "DLD",
+      spaceName: "Digital Library Development",
+      url: `${base}/spaces/DLD`,
+      pageCount: 199,
+    }]);
   });
 });
 

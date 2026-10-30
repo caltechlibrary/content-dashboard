@@ -8,6 +8,7 @@
     "compile": "deno compile --allow-net --allow-env --allow-read --output bin/content-dashboard router/main.ts",
     "lg-client.ts": "deno bundle --inline-imports=true lg-client.ts --outdir htdocs/modules/",
     "ds-client.ts": "deno bundle --inline-imports=true ds-client.ts --outdir htdocs/modules/",
-    "htdocs": "deno task lg-client.ts && deno task ds-client.ts"
+    "confluence-client.ts": "deno bundle --inline-imports=true confluence-client.ts --outdir htdocs/modules/",
+    "htdocs": "deno task lg-client.ts && deno task ds-client.ts && deno task confluence-client.ts"
   }
 }

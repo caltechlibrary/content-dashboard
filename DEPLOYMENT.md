@@ -1,7 +1,7 @@
 
 # Deploying Content Dashboard
 
-Content Dashboard is implemented as a Dataset web application and a Deno+TypeScript based router/API gateway that serves the browser app, proxies the LibGuides API, and proxies the dataset JSON API. Access to LibGuides is handled through a `.env` file in the root directory the application. Two variables need to be set, LIBGUIDES_CLIENT_ID and LIBGUIDES_CLIENT_SECRET. The values for this are found in the LibGuides Tools -> API -> Authentication page. The `.env` file should never be checked into the Git repository.
+Content Dashboard is implemented as a Dataset web application and a Deno+TypeScript based router/API gateway that serves the browser app, proxies the LibGuides API, and proxies the dataset JSON API. Access to LibGuides is handled through a `.env` file in the root directory the application. Two variables need to be set, LIBGUIDES_CLIENT_ID and LIBGUIDES_CLIENT_SECRET. The values for this are found in the LibGuides Tools -> API -> Authentication page. The Confluence view also needs two, CONFLUENCE_EMAIL and CONFLUENCE_API_TOKEN, described below. The `.env` file should never be checked into the Git repository.
 
 The application is designed to run as a systemd service on Ubuntu Server 24.04 LTS (or more recent release). The executable for the router needs to be compiled and in the `bin` directory based on the systemd service definision found in the `etc` directory.
 
@@ -30,6 +30,28 @@ The application is designed to run as a systemd service on Ubuntu Server 24.04 L
   so no per-environment configuration file is needed. In production, Apache proxies
   `/content-dashboard/` to the router on `:8200`, which serves `htdocs/` directly and
   proxies `/lg/api/*` and `/ds/api/*` per `etc/content-dashboard.conf-example`.
+
+## Confluence API token
+
+The Confluence view reads the space list with a personal Atlassian API token.
+`.env` needs both the token and the email of the Atlassian account that
+created it:
+
+```
+CONFLUENCE_EMAIL="someone@caltech.edu"
+CONFLUENCE_API_TOKEN="..."
+```
+
+Tokens are made at https://id.atlassian.com/manage-profile/security/api-tokens.
+
+- The token sees only what its owner can see. A space restricted from that
+  account won't show up in the dashboard.
+- Atlassian tokens expire (a year at most). When it does, the Confluence view
+  shows "Could not load the space list from Confluence" and the router log
+  shows `confluence spaces error: 401`. Make a new token, put it in `.env`,
+  and `sudo systemctl restart content-dashboard.service`.
+- If the person who owns the token leaves, the token stops working with
+  their account. Replace it with one from someone else.
 
 ## Troubleshooting
 

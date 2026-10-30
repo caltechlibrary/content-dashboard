@@ -1,5 +1,6 @@
 import { getAccounts, getGuides } from './modules/lg-client.js';
 import { getAllObjects, putObject, postObject } from './modules/ds-client.js';
+import { getSpaces } from './modules/confluence-client.js';
 
 // Configuration
 // Populated at startup by loadConfig() via GET api/config from the router.
@@ -41,8 +42,13 @@ const state = {
   guideOptions: [],   // sorted unique guide titles
   selectedName: '',   // shared across Website Pages + Research Guides
   stewardship: {},    // page_id → { expert } from datasetd
+  spaces: null,       // [{ spaceKey, spaceName, url, pageCount }] from Confluence; null while loading
+  spacesError: '',    // set if the Confluence space list could not be loaded
+  confluence: {},     // space_key → { owner } from datasetd
   audit: {},          // 'page:{id}' | 'guide:{id}' → { links, accessibility, accuracy }
   manageFilters: { page: '', guide: '', expert: '', department: '' },
+  confluenceFilters: { space: '', owner: '' },
+  confluenceSort: { col: 'name', dir: 'asc' },
   wpFilters: { page: '', guide: '', expert: '', department: '', hideHidden: false, hideRedirected: false },
   rgFilters: { guide: '', owner: '' },
   wpSort:  { col: 'guide', dir: 'asc' },
@@ -63,6 +69,18 @@ function sortTh(label, col, sortState) {
   const arrow  = active ? (sortState.dir === 'asc' ? ' ▲' : ' ▼') : ' ▲';
   const cls    = `sort-th${active ? ' sort-th-active' : ''}`;
   return `<th scope="col" class="${cls}" data-sort="${col}">${label}<span class="sort-indicator${active ? ' sort-active' : ''}">${arrow}</span></th>`;
+}
+
+// The Confluence table puts a filter box in the same header cell as the
+// sort label, so it needs the arrow on its own rather than a whole <th>
+function sortCls(col, sortState) {
+  return `sort-th${sortState.col === col ? ' sort-th-active' : ''}`;
+}
+
+function sortArrow(col, sortState) {
+  const active = sortState.col === col;
+  const arrow  = active ? (sortState.dir === 'asc' ? ' ▲' : ' ▼') : ' ▲';
+  return `<span class="sort-indicator${active ? ' sort-active' : ''}">${arrow}</span>`;
 }
 
 function esc(v) {
@@ -268,6 +286,15 @@ async function loadData(force = false) {
     state.stewardship = await getAllObjects('stewardship.ds');
   } catch (err) { console.error('could not load stewardship data:', err); }
 
+  // Load Confluence space owners from datasetd
+  try {
+    state.confluence = await getAllObjects('confluence.ds');
+  } catch (err) { console.error('could not load confluence data:', err); }
+
+  // The space list itself comes from Confluence. It takes a request per
+  // space to count pages, so don't hold up the rest of the dashboard for it.
+  loadSpaces();
+
   // Fetch staff accounts for name lists (router strips PII, only id/first_name/last_name returned)
   try {
     const accounts = await getAccounts();
@@ -315,6 +342,18 @@ async function loadData(force = false) {
   } catch (err) {
     showOverlay('error', err.message);
   }
+}
+
+async function loadSpaces() {
+  state.spacesError = '';
+  try {
+    state.spaces = await getSpaces();
+  } catch (err) {
+    console.error('could not load confluence spaces:', err);
+    state.spaces = [];
+    state.spacesError = 'Could not load the space list from Confluence.';
+  }
+  if (state.view === 'confluence') renderConfluence();
 }
 
 function updateLastFetched(ts) {
@@ -631,6 +670,180 @@ function renderMyResearchGuides() {
   }
 }
 
+
+
+// View: Confluence Spaces
+function renderConfluence() {
+  const f = state.confluenceFilters;
+  const container = el('view-confluence');
+
+  // Remember the focused header search box so it survives the re-render each keystroke triggers
+  const focused    = document.activeElement;
+  const focusId    = focused && container.contains(focused) ? focused.id : null;
+  const focusStart = focusId ? focused.selectionStart : null;
+  const focusEnd   = focusId ? focused.selectionEnd   : null;
+
+  // Empty owner reads as the word "unassigned" so it can be searched for like any value
+  const has = (val, q) => (String(val || '').toLowerCase() || 'unassigned').includes(q.trim().toLowerCase());
+
+  const sort = state.confluenceSort;
+  let spaces = (state.spaces || []).map(s => ({
+    ...s,
+    owner: state.confluence[s.spaceKey]?.owner || '',
+  }));
+
+  // The key isn't shown in the table any more, but typing one still finds the space
+  if (f.space) spaces = spaces.filter(s => has(s.spaceName, f.space) || has(s.spaceKey, f.space));
+  if (f.owner) spaces = spaces.filter(s => has(s.owner, f.owner));
+
+  spaces.sort((a, b) => {
+    let cmp;
+    if (sort.col === 'pages')       cmp = (a.pageCount ?? -1) - (b.pageCount ?? -1);
+    else if (sort.col === 'owner')  cmp = (a.owner || '').localeCompare(b.owner || '');
+    else                            cmp = a.spaceName.localeCompare(b.spaceName);
+    return sort.dir === 'asc' ? cmp : -cmp;
+  });
+
+  const assigned = spaces.filter(s => s.owner).length;
+  const countOwned = () => spaces.filter(s => state.confluence[s.spaceKey]?.owner).length;
+
+  // Owners come from the LibGuides staff accounts and nowhere else — this is a
+  // fixed list, not a free-text box. An owner already on a record that is no
+  // longer in that list still gets an option so the value isn't silently lost.
+  const ownerOpts = (selected) => {
+    const names = state.names.includes(selected) || !selected
+      ? state.names
+      : [...state.names, selected].sort((a, b) => a.localeCompare(b));
+    return names.map(n =>
+      `<option value="${esc(n)}" ${n === selected ? 'selected' : ''}>${esc(n)}</option>`
+    ).join('');
+  };
+
+  const spaceCell = (s) =>
+    `<div class="page-cell"><a class="page-link" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.spaceName)}</a></div>`;
+
+  // A dash when the page count lookup for that space failed
+  const pagesCell = (s) => `<td class="col-guide">${s.pageCount ?? '—'}</td>`;
+
+  const emptyMessage = state.spaces === null ? 'Loading spaces from Confluence…'
+    : state.spacesError || 'No spaces match the current filters.';
+
+  const rowsHtml = spaces.length === 0
+    ? `<tr><td colspan="6"><div class="empty-state">${esc(emptyMessage)}</div></td></tr>`
+    : spaces.map(s => `
+        <tr data-space-key="${esc(s.spaceKey)}">
+          <td title="${esc(s.spaceName)}">${spaceCell(s)}</td>
+          <td>
+            <select class="steward-input" data-space-key="${esc(s.spaceKey)}"
+              data-empty="${!s.owner}"
+              aria-label="Owner for ${esc(s.spaceName)}">
+              <option value="">unassigned</option>
+              ${ownerOpts(s.owner)}
+            </select>
+          </td>
+          ${pagesCell(s)}
+          ${auditCells('space:' + s.spaceKey)}
+        </tr>`).join('');
+
+  const searchBox = (col, label) =>
+    `<input class="header-search" type="search" id="cf-search-${col}" value="${esc(f[col])}" placeholder="Filter…" aria-label="Filter by ${label}">`;
+
+  container.innerHTML = `
+    <div class="topbar">
+      <h1>Confluence Spaces</h1>
+    </div>
+    <div class="content">
+      <div class="table-meta" id="cf-meta">${confluenceMeta(spaces.length, assigned)}</div>
+      <div class="table-wrap">
+        <table>
+          <colgroup>
+            <col style="width:38%"><col style="width:28%"><col style="width:9%">
+            <col style="width:8%"><col style="width:8%"><col style="width:9%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col" class="${sortCls('name', sort)}" data-sort="name"><span class="th-label">Space${sortArrow('name', sort)}</span>${searchBox('space', 'space')}</th>
+              <th scope="col" class="${sortCls('owner', sort)}" data-sort="owner"><span class="th-label">Owner${sortArrow('owner', sort)}</span>${searchBox('owner', 'owner')}</th>
+              <th scope="col" class="${sortCls('pages', sort)}" data-sort="pages"><span class="th-label">Pages${sortArrow('pages', sort)}</span></th>
+              <th scope="col" class="col-audit-check">Links</th><th scope="col" class="col-audit-check">A11y</th><th scope="col" class="col-audit-check">Accuracy</th>
+            </tr>
+          </thead>
+          <tbody id="cf-tbody">${rowsHtml}</tbody>
+          ${auditTfoot('cf-tbody', 3)}
+        </table>
+      </div>
+    </div>`;
+
+  ['space', 'owner'].forEach(col => {
+    el(`cf-search-${col}`)?.addEventListener('input', e => {
+      state.confluenceFilters[col] = e.target.value;
+      renderConfluence();
+    });
+  });
+
+  // Clicking a header sorts; clicking the filter box inside it must not
+  container.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', e => {
+      if (e.target.closest('.header-search')) return;
+      const col = th.dataset.sort;
+      state.confluenceSort = state.confluenceSort.col === col
+        ? { col, dir: state.confluenceSort.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'asc' };
+      renderConfluence();
+    });
+  });
+
+  // Put the cursor back where it was so typing in a header filter isn't interrupted by the re-render
+  if (focusId) {
+    const box = el(focusId);
+    if (box) {
+      box.focus();
+      if (focusStart != null && box.setSelectionRange) {
+        try { box.setSelectionRange(focusStart, focusEnd); } catch (_) {}
+      }
+    }
+  }
+
+  el('cf-tbody')?.addEventListener('change', e => {
+    const cb = e.target.closest('.audit-cb');
+    if (!cb) return;
+    saveAuditCheck(cb.dataset.auditKey, cb.dataset.field, cb.checked);
+  });
+
+  el('cf-tbody')?.closest('table')?.addEventListener('click', e => {
+    const link = e.target.closest('.audit-clear-link');
+    if (!link) return;
+    e.preventDefault();
+    clearAuditField(link.dataset.field, link.dataset.tbody);
+  });
+
+  // Inline edit — save the owner to datasetd on change
+  el('cf-tbody')?.addEventListener('change', e => {
+    const input = e.target.closest('.steward-input');
+    if (!input) return;
+    const key   = input.dataset.spaceKey;
+    const value = input.value.trim();
+    input.dataset.empty = String(!value);
+
+    // A space gets a record the first time someone assigns it an owner
+    const isNewRecord = !state.confluence[key];
+    if (isNewRecord) state.confluence[key] = { spaceKey: key };
+    state.confluence[key].owner = value;
+
+    const payload = { spaceKey: key, owner: value, updatedBy: CONFIG.currentUser };
+    // PUT silently no-ops if the record doesn't exist yet — use POST to create it.
+    if (isNewRecord) postObject('confluence.ds', key, payload);
+    else             putObject('confluence.ds', key, payload);
+
+    // Update the count line in place; re-rendering would drop the scroll position
+    const meta = el('cf-meta');
+    if (meta) meta.textContent = confluenceMeta(spaces.length, countOwned());
+  });
+}
+
+function confluenceMeta(total, owned) {
+  return `${total} space${total === 1 ? '' : 's'} · ${owned} with an owner`;
+}
 
 // View: Reports
 const WEBSITE_REPORTS = [
@@ -1300,6 +1513,7 @@ function renderCurrentView() {
   switch (state.view) {
     case 'my-website-pages':   renderMyWebsitePages();   break;
     case 'my-research-guides': renderMyResearchGuides(); break;
+    case 'confluence':         renderConfluence();       break;
     case 'reports':            renderReports();          break;
     case 'manage-stewards':    renderManageStewards();   break;
   }

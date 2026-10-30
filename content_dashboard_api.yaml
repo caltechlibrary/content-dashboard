@@ -57,7 +57,8 @@ schemas:
     id: audit_model
     description: |
       Model for audit check results. Each entry tracks the audit status
-      (links, accessibility, accuracy) for a page or guide.
+      (links, accessibility, accuracy) for a page, a guide, or a
+      Confluence space.
     elements:
       - id: type
         type: text
@@ -67,15 +68,18 @@ schemas:
         options:
           - {"page": "Page"}
           - {"guide": "Guide"}
+          - {"space": "Confluence Space"}
         is_primary_id: true
         label: "Content Type"
 
+      # LibGuides page and guide IDs are numbers, but Confluence space keys
+      # are short words (DLD, ALS, Website), so this can't be digits-only.
       - id: id
         type: text
         attributes:
           name: id
           required: true
-        pattern: "^[0-9]+$"
+        pattern: "^[A-Za-z0-9_-]+$"
         is_primary_id: true
         label: "ID"
 
@@ -107,6 +111,41 @@ schemas:
           required: true
         generator: "timestamp"
         label: "Audit Updated"
+
+      - id: updatedBy
+        type: text
+        attributes:
+          name: updatedBy
+        label: "Updated By"
+
+  confluence_model:
+    id: confluence_model
+    description: |
+      Model for Confluence space ownership. The space list, names and page
+      counts come live from the Confluence API through the router; this only
+      holds who owns each space. A space gets a record the first time it is
+      assigned an owner. Owners are people, not departments.
+    elements:
+      - id: spaceKey
+        type: text
+        attributes:
+          name: spaceKey
+          required: true
+        is_primary_id: true
+        label: "Space Key"
+
+      - id: owner
+        type: text
+        attributes:
+          name: owner
+        label: "Owner"
+
+      - id: lastUpdated
+        type: datetime-local
+        attributes:
+          name: lastUpdated
+        generator: "timestamp"
+        label: "Last Updated"
 
       - id: updatedBy
         type: text
@@ -162,3 +201,14 @@ collections:
            OR src->>'accessibility' = 0
            OR src->>'accuracy' = 0
 
+  - dataset: confluence.ds
+    schema: confluence_model
+    validate: false
+    keys: true
+    read: true
+    create: true
+    update: true
+    delete: true
+    query:
+      by_owner: |
+        SELECT src FROM confluence WHERE src->>'owner' = ?

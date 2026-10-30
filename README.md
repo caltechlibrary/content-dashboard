@@ -42,7 +42,3 @@ LibGuides has a highlevel view of ownsership while Caltech Library has specific 
 
 
 - [Getting Help, Reporting bugs](https://github.com/caltechlibrary/content-dashboard/issues)
-
-- [Installation](INSTALL.md)
-- [About](about.md)
-

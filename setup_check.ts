@@ -163,6 +163,14 @@ if (!await fileExists(".env")) {
             "  /lg/api/* will return errors until set.\n" +
             "  See DEPLOYMENT.md.");
   }
+
+  const missingCf = ["CONFLUENCE_EMAIL", "CONFLUENCE_API_TOKEN"]
+    .filter((name) => !readEnvVar(envText, name));
+  if (missingCf.length > 0) {
+    warning(`.env: missing or empty ${missingCf.join(", ")}\n` +
+            "  /cf/api/* and the Confluence view will return errors until set.\n" +
+            "  See DEPLOYMENT.md.");
+  }
 }
 
 // ── Report ─────────────────────────────────────────────────────────

@@ -6,12 +6,13 @@ The JavaScript in this directory is build output. Do not edit it directly.
 |------|------------|
 | `ds-client.js` | `ds-client.ts` in the repository root |
 | `lg-client.js` | `lg-client.ts` in the repository root |
+| `confluence-client.js` | `confluence-client.ts` in the repository root |
 
-To change either one, edit the TypeScript source in the root directory and
+To change any of them, edit the TypeScript source in the root directory and
 rebuild:
 
 ```
 deno task htdocs
 ```
 
-That runs `deno bundle` on both sources and overwrites the `.js` files here.
+That runs `deno bundle` on each source and overwrites the `.js` files here.
