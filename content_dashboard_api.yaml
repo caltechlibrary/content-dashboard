@@ -121,9 +121,10 @@ schemas:
   confluence_model:
     id: confluence_model
     description: |
-      Model for Confluence space ownership. One entry per current team
-      space, imported from the Confluence "Spaces report" CSV export by
-      convert_confluence.ts. Owners are people, not departments.
+      Model for Confluence space ownership. The space list, names and page
+      counts come live from the Confluence API through the router; this only
+      holds who owns each space. A space gets a record the first time it is
+      assigned an owner. Owners are people, not departments.
     elements:
       - id: spaceKey
         type: text
@@ -133,31 +134,11 @@ schemas:
         is_primary_id: true
         label: "Space Key"
 
-      - id: spaceName
-        type: text
-        attributes:
-          name: spaceName
-        label: "Space Name"
-
       - id: owner
         type: text
         attributes:
           name: owner
         label: "Owner"
-
-      # From the export, not editable in the dashboard. Blank for spaces
-      # nobody has opened in the window Confluence reports on.
-      - id: lastViewed
-        type: text
-        attributes:
-          name: lastViewed
-        label: "Last Viewed"
-
-      - id: contentCount
-        type: number
-        attributes:
-          name: contentCount
-        label: "Pages"
 
       - id: lastUpdated
         type: datetime-local
@@ -231,11 +212,3 @@ collections:
     query:
       by_owner: |
         SELECT src FROM confluence WHERE src->>'owner' = ?
-      unassigned: |
-        SELECT src FROM confluence
-        WHERE (src->>'owner' IS NULL OR src->>'owner' = '')
-      unviewed: |
-        SELECT src FROM confluence
-        WHERE (src->>'lastViewed' IS NULL OR src->>'lastViewed' = '')
-      empty_spaces: |
-        SELECT src FROM confluence WHERE src->>'contentCount' = 0

@@ -8,7 +8,6 @@ export interface BrowserConfig {
   website_page_groups: number[];
   research_guide_groups: number[];
   departments: string[];
-  confluence_base_url?: string;
 }
 
 export interface LibGuidesConfig {
@@ -16,6 +15,12 @@ export interface LibGuidesConfig {
   token_url: string;
   client_id: string;
   client_secret: string;
+}
+
+export interface ConfluenceConfig {
+  base_url: string;
+  email: string;
+  api_token: string;
 }
 
 export interface CacheConfig {
@@ -30,6 +35,7 @@ export interface DatasetConfig {
 export interface RouterConfig {
   port: number;
   libguides: LibGuidesConfig;
+  confluence: ConfluenceConfig;
   cache: CacheConfig;
   dataset: DatasetConfig;
 }
@@ -51,6 +57,16 @@ export async function loadConfig(path: string): Promise<AppConfig> {
     console.warn(
       "warning: LIBGUIDES_CLIENT_ID/LIBGUIDES_CLIENT_SECRET are empty — " +
         "/lg/api/* will return errors until .env is created (see DEPLOYMENT.md)",
+    );
+  }
+
+  const cf = cfg.router.confluence;
+  cf.email = expandEnv(cf.email);
+  cf.api_token = expandEnv(cf.api_token);
+  if (!cf.email || !cf.api_token) {
+    console.warn(
+      "warning: CONFLUENCE_EMAIL/CONFLUENCE_API_TOKEN are empty — " +
+        "/cf/api/* will return errors until they are added to .env (see DEPLOYMENT.md)",
     );
   }
 

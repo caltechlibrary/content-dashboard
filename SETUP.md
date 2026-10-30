@@ -1,7 +1,6 @@
 # Content Dashboard: Setup Guide
 
-This document covers configuration and setup for operators and developers. It assumes the
-repository is already cloned and that the required software (listed below) is installed.
+This document covers configuration and setup. It assumes the repository is already cloned and that the required software (listed below) is installed.
 
 ## Architecture summary
 
@@ -14,6 +13,7 @@ Browser → Apache + Shibboleth (apps.library.caltech.edu)
               └─ /content-dashboard/  →  router  :8200
                                           ├─ /api/{config,whoami,health}  (native)
                                           ├─ /lg/api/*  →  LibGuides API (proxied)
+                                          ├─ /cf/api/*  →  Confluence API (read by the router)
                                           ├─ /ds/api/*  →  datasetd :8201 (proxied, internal-only)
                                           └─ everything else → htdocs/ static files
 ```
@@ -83,10 +83,12 @@ be matched by corresponding changes to `htdocs/app.js`.
 schemas:
   stewardship_model: ...   # Fields: pageId, expert, editor, department, lastUpdated, updatedBy
   audit_model:       ...   # Fields: type, id, links, accessibility, accuracy, updatedAt, updatedBy
+  confluence_model:  ...   # Fields: spaceKey, owner, lastUpdated, updatedBy
 
 collections:
   - dataset: stewardship.ds  # Stores page stewardship assignments
   - dataset: audit.ds        # Stores audit check results
+  - dataset: confluence.ds   # Stores Confluence space owners
 ```
 
 ### browser_config
@@ -113,8 +115,7 @@ browser_config:
     - "Archives"
     - "ACS"
     - "CLOPS"
-    - "DLD"
-    - "LIT"
+    - "DnD"
     - "RS"
 ```
 
@@ -140,9 +141,13 @@ router:
     token_url: "https://lgapi-us.libapps.com/1.2/oauth/token"
     client_id: "${LIBGUIDES_CLIENT_ID}"      # Never hardcode — set via environment variable.
     client_secret: "${LIBGUIDES_CLIENT_SECRET}"
+  confluence:
+    base_url: "https://caltechlibrary.atlassian.net/wiki"
+    email: "${CONFLUENCE_EMAIL}"            # Never hardcode — set via environment variable.
+    api_token: "${CONFLUENCE_API_TOKEN}"
   cache:
     enabled: true
-    ttl_seconds: 3600      # How long the router caches LibGuides API responses (seconds).
+    ttl_seconds: 3600      # How long the router caches LibGuides and Confluence responses (seconds).
 ```
 
 ---
@@ -153,6 +158,8 @@ router:
 |----------|----------|-------------|
 | `LIBGUIDES_CLIENT_ID` | Production | OAuth client ID from Springshare |
 | `LIBGUIDES_CLIENT_SECRET` | Production | OAuth client secret from Springshare |
+| `CONFLUENCE_EMAIL` | Production | Email of the Atlassian account that owns the API token |
+| `CONFLUENCE_API_TOKEN` | Production | Personal Atlassian API token (see DEPLOYMENT.md) |
 | `DEV_USER` | Development only | Identity returned by `/api/whoami` when Shibboleth is absent (e.g. your email). Defaults to `dev-user` if unset. |
 
 ---
@@ -183,29 +190,16 @@ To regenerate `stewardship.jsonl` from `stewardship.json`:
 jq -c 'to_entries[] | {key: .key, object: .value}' stewardship.json > stewardship.jsonl
 ```
 
-### 2b. Load the Confluence spaces
+### 2b. Confluence spaces
 
-There is no Confluence API available to us, so the space list comes from
-Confluence's own **Spaces report** CSV export (Confluence admin → Spaces →
-export). Convert it, then load it:
+Nothing to load. The router reads the space list from the Confluence API each
+time the view is opened (cached for `cache.ttl_seconds`). It shows current
+spaces only and leaves out personal spaces, since there's no owner to assign
+on those. `confluence.ds` starts empty; a space gets a record the first time
+someone picks an owner for it in the dashboard.
 
-```shell
-deno task convert-confluence "/path/to/Spaces report - ....csv"
-dataset load confluence.ds < confluence.jsonl
-```
-
-The converter keeps only spaces whose status is `CURRENT`, and skips personal
-spaces (their keys start with `~`) since there is no owner to assign on those.
-It imports four columns — space key, space name, last viewed, content count.
-Owners are assigned in the dashboard, never imported.
-
-Re-run both commands whenever a fresh export is pulled — only the converter,
-not the `init`. On a re-load, `dataset load` skips any space key it already
-has (it prints `duplicate key ..., skipping` and a load-error count) and adds
-the new ones. So owners already assigned in the dashboard survive a re-load,
-but the page counts and last-viewed dates on existing spaces do **not** get
-refreshed, and spaces that have since been archived are not removed. If you
-want those refreshed, the record has to be updated or deleted deliberately.
+This needs `CONFLUENCE_EMAIL` and `CONFLUENCE_API_TOKEN` in `.env`. Without
+them the rest of the dashboard works, but the Confluence view shows an error.
 
 ### 3. Start datasetd
 
@@ -244,9 +238,10 @@ The router serves `htdocs/` directly and handles `/api/*`, `/lg/api/*`, and
 
 ### Building the browser client modules
 
-`htdocs/modules/lg-client.js` and `htdocs/modules/ds-client.js` are compiled from
-`lg-client.ts` and `ds-client.ts` and are checked into the repository. If you change
-either `.ts` source file, rebuild them with:
+`htdocs/modules/lg-client.js`, `ds-client.js` and `confluence-client.js` are
+compiled from `lg-client.ts`, `ds-client.ts` and `confluence-client.ts` and are
+checked into the repository. If you change any of the `.ts` source files,
+rebuild them with:
 
 ```shell
 deno task htdocs
@@ -320,6 +315,7 @@ Once both services are running and Apache is configured:
 6. Confirm the stewardship and audit views load data (via `/ds/api/...`, proxied
    to datasetd)
 7. Confirm the Website Pages and Research Guides views populate (via `/lg/api/guides`)
+8. Confirm the Confluence view lists spaces with page counts (via `/cf/api/spaces`)
 
 If `whoami` returns `"dev-user"` in production, check that the `RequestHeader set
 Remote-User` directive is inside the `<Location>` block and that Shibboleth is

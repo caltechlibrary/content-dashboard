@@ -1,7 +1,6 @@
 {
   "tasks": {
     "check-setup": "deno run --allow-run --allow-read setup_check.ts",
-    "convert-confluence": "deno run --allow-read --allow-write convert_confluence.ts",
     "gen-code": "deno run --allow-read --allow-write ./cmt.ts codemeta.json about.md CITATION.cff version.ts",
     "content-dashboard-api": "datasetd content_dashboard_api.yaml",
     "content-dashboard": "deno run --allow-net --allow-env --allow-read --env-file=.env router/main.ts content_dashboard.yaml",
@@ -9,6 +8,7 @@
     "compile": "deno compile --allow-net --allow-env --allow-read --output bin/content-dashboard router/main.ts",
     "lg-client.ts": "deno bundle --inline-imports=true lg-client.ts --outdir htdocs/modules/",
     "ds-client.ts": "deno bundle --inline-imports=true ds-client.ts --outdir htdocs/modules/",
-    "htdocs": "deno task lg-client.ts && deno task ds-client.ts"
+    "confluence-client.ts": "deno bundle --inline-imports=true confluence-client.ts --outdir htdocs/modules/",
+    "htdocs": "deno task lg-client.ts && deno task ds-client.ts && deno task confluence-client.ts"
   }
 }

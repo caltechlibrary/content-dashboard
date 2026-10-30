@@ -1,5 +1,6 @@
 import { getAccounts, getGuides } from './modules/lg-client.js';
 import { getAllObjects, putObject, postObject } from './modules/ds-client.js';
+import { getSpaces } from './modules/confluence-client.js';
 
 // Configuration
 // Populated at startup by loadConfig() via GET api/config from the router.
@@ -18,7 +19,6 @@ async function loadConfig() {
     WEBSITE_PAGE_GROUPS:   remote.website_page_groups,
     RESEARCH_GUIDE_GROUPS: remote.research_guide_groups,
     DEPARTMENTS:           remote.departments,
-    CONFLUENCE_BASE_URL:   remote.confluence_base_url,
     currentUser: 'unknown',
   };
 }
@@ -42,7 +42,9 @@ const state = {
   guideOptions: [],   // sorted unique guide titles
   selectedName: '',   // shared across Website Pages + Research Guides
   stewardship: {},    // page_id → { expert } from datasetd
-  confluence: {},     // space_key → { spaceName, owner, lastViewed, contentCount } from datasetd
+  spaces: null,       // [{ spaceKey, spaceName, url, pageCount }] from Confluence; null while loading
+  spacesError: '',    // set if the Confluence space list could not be loaded
+  confluence: {},     // space_key → { owner } from datasetd
   audit: {},          // 'page:{id}' | 'guide:{id}' → { links, accessibility, accuracy }
   manageFilters: { page: '', guide: '', expert: '', department: '' },
   confluenceFilters: { space: '', owner: '' },
@@ -284,11 +286,14 @@ async function loadData(force = false) {
     state.stewardship = await getAllObjects('stewardship.ds');
   } catch (err) { console.error('could not load stewardship data:', err); }
 
-  // Load Confluence spaces from datasetd. These come from a CSV export
-  // (there is no Confluence API here), loaded by convert_confluence.ts.
+  // Load Confluence space owners from datasetd
   try {
     state.confluence = await getAllObjects('confluence.ds');
   } catch (err) { console.error('could not load confluence data:', err); }
+
+  // The space list itself comes from Confluence. It takes a request per
+  // space to count pages, so don't hold up the rest of the dashboard for it.
+  loadSpaces();
 
   // Fetch staff accounts for name lists (router strips PII, only id/first_name/last_name returned)
   try {
@@ -337,6 +342,18 @@ async function loadData(force = false) {
   } catch (err) {
     showOverlay('error', err.message);
   }
+}
+
+async function loadSpaces() {
+  state.spacesError = '';
+  try {
+    state.spaces = await getSpaces();
+  } catch (err) {
+    console.error('could not load confluence spaces:', err);
+    state.spaces = [];
+    state.spacesError = 'Could not load the space list from Confluence.';
+  }
+  if (state.view === 'confluence') renderConfluence();
 }
 
 function updateLastFetched(ts) {
@@ -670,12 +687,9 @@ function renderConfluence() {
   const has = (val, q) => (String(val || '').toLowerCase() || 'unassigned').includes(q.trim().toLowerCase());
 
   const sort = state.confluenceSort;
-  let spaces = Object.entries(state.confluence).map(([key, s]) => ({
-    spaceKey:     s.spaceKey || key,
-    spaceName:    s.spaceName || key,
-    owner:        s.owner || '',
-    lastViewed:   s.lastViewed || '',
-    contentCount: Number(s.contentCount) || 0,
+  let spaces = (state.spaces || []).map(s => ({
+    ...s,
+    owner: state.confluence[s.spaceKey]?.owner || '',
   }));
 
   // The key isn't shown in the table any more, but typing one still finds the space
@@ -684,15 +698,14 @@ function renderConfluence() {
 
   spaces.sort((a, b) => {
     let cmp;
-    if (sort.col === 'pages')       cmp = a.contentCount - b.contentCount;
-    else if (sort.col === 'viewed') cmp = String(a.lastViewed).localeCompare(String(b.lastViewed));
+    if (sort.col === 'pages')       cmp = (a.pageCount ?? -1) - (b.pageCount ?? -1);
     else if (sort.col === 'owner')  cmp = (a.owner || '').localeCompare(b.owner || '');
     else                            cmp = a.spaceName.localeCompare(b.spaceName);
     return sort.dir === 'asc' ? cmp : -cmp;
   });
 
   const assigned = spaces.filter(s => s.owner).length;
-  const countOwned = () => Object.values(state.confluence).filter(s => s.owner).length;
+  const countOwned = () => spaces.filter(s => state.confluence[s.spaceKey]?.owner).length;
 
   // Owners come from the LibGuides staff accounts and nowhere else — this is a
   // fixed list, not a free-text box. An owner already on a record that is no
@@ -706,22 +719,17 @@ function renderConfluence() {
     ).join('');
   };
 
-  const spaceCell = (s) => {
-    const base = CONFIG.CONFLUENCE_BASE_URL;
-    const name = base
-      ? `<a class="page-link" href="${esc(base.replace(/\/+$/, ''))}/spaces/${encodeURIComponent(s.spaceKey)}" target="_blank" rel="noopener">${esc(s.spaceName)}</a>`
-      : `<span class="page-link">${esc(s.spaceName)}</span>`;
-    return `<div class="page-cell">${name}</div>`;
-  };
+  const spaceCell = (s) =>
+    `<div class="page-cell"><a class="page-link" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.spaceName)}</a></div>`;
 
-  // Spaces nobody has opened in the window Confluence reports on come
-  // through with a blank date — say so rather than leaving the cell empty
-  const viewedCell = (s) => s.lastViewed
-    ? `<td class="col-guide">${esc(formatDate(s.lastViewed))}</td>`
-    : `<td class="col-guide"><span class="badge badge-muted">never</span></td>`;
+  // A dash when the page count lookup for that space failed
+  const pagesCell = (s) => `<td class="col-guide">${s.pageCount ?? '—'}</td>`;
+
+  const emptyMessage = state.spaces === null ? 'Loading spaces from Confluence…'
+    : state.spacesError || 'No spaces match the current filters.';
 
   const rowsHtml = spaces.length === 0
-    ? `<tr><td colspan="7"><div class="empty-state">No spaces match the current filters.</div></td></tr>`
+    ? `<tr><td colspan="6"><div class="empty-state">${esc(emptyMessage)}</div></td></tr>`
     : spaces.map(s => `
         <tr data-space-key="${esc(s.spaceKey)}">
           <td title="${esc(s.spaceName)}">${spaceCell(s)}</td>
@@ -733,8 +741,7 @@ function renderConfluence() {
               ${ownerOpts(s.owner)}
             </select>
           </td>
-          ${viewedCell(s)}
-          <td class="col-guide">${s.contentCount}</td>
+          ${pagesCell(s)}
           ${auditCells('space:' + s.spaceKey)}
         </tr>`).join('');
 
@@ -750,21 +757,19 @@ function renderConfluence() {
       <div class="table-wrap">
         <table>
           <colgroup>
-            <col style="width:30%"><col style="width:24%">
-            <col style="width:13%"><col style="width:8%">
+            <col style="width:38%"><col style="width:28%"><col style="width:9%">
             <col style="width:8%"><col style="width:8%"><col style="width:9%">
           </colgroup>
           <thead>
             <tr>
               <th scope="col" class="${sortCls('name', sort)}" data-sort="name"><span class="th-label">Space${sortArrow('name', sort)}</span>${searchBox('space', 'space')}</th>
               <th scope="col" class="${sortCls('owner', sort)}" data-sort="owner"><span class="th-label">Owner${sortArrow('owner', sort)}</span>${searchBox('owner', 'owner')}</th>
-              <th scope="col" class="${sortCls('viewed', sort)}" data-sort="viewed"><span class="th-label">Last viewed${sortArrow('viewed', sort)}</span></th>
               <th scope="col" class="${sortCls('pages', sort)}" data-sort="pages"><span class="th-label">Pages${sortArrow('pages', sort)}</span></th>
               <th scope="col" class="col-audit-check">Links</th><th scope="col" class="col-audit-check">A11y</th><th scope="col" class="col-audit-check">Accuracy</th>
             </tr>
           </thead>
           <tbody id="cf-tbody">${rowsHtml}</tbody>
-          ${auditTfoot('cf-tbody', 4)}
+          ${auditTfoot('cf-tbody', 3)}
         </table>
       </div>
     </div>`;
@@ -820,20 +825,12 @@ function renderConfluence() {
     const value = input.value.trim();
     input.dataset.empty = String(!value);
 
+    // A space gets a record the first time someone assigns it an owner
     const isNewRecord = !state.confluence[key];
-    if (isNewRecord) state.confluence[key] = { spaceKey: key, spaceName: key, lastViewed: '', contentCount: 0 };
+    if (isNewRecord) state.confluence[key] = { spaceKey: key };
     state.confluence[key].owner = value;
 
-    // A write replaces the whole record, so send the imported fields back too
-    const entry = state.confluence[key];
-    const payload = {
-      spaceKey:     key,
-      spaceName:    entry.spaceName || '',
-      owner:        value,
-      lastViewed:   entry.lastViewed || '',
-      contentCount: Number(entry.contentCount) || 0,
-      updatedBy:    CONFIG.currentUser,
-    };
+    const payload = { spaceKey: key, owner: value, updatedBy: CONFIG.currentUser };
     // PUT silently no-ops if the record doesn't exist yet — use POST to create it.
     if (isNewRecord) postObject('confluence.ds', key, payload);
     else             putObject('confluence.ds', key, payload);
